@@ -140,7 +140,10 @@ function renderArtifacts(jobId, artifacts = []) {
     .map((artifact) => {
       const filename = artifact.meta?.filename;
       const label = filename || artifact.kind || "artifact";
-      const href = filename ? `${apiBase}/jobs/${jobId}/artifacts/${filename}` : artifact.uri;
+      let href = artifact.uri;
+      if (artifact.kind === "file" && filename) {
+        href = `${apiBase}/jobs/${jobId}/artifacts/${filename}`;
+      }
       return `
         <div class="artifact">
           <div>

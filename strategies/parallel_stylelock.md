@@ -72,6 +72,7 @@
 ## 출력
 - clips: 15초 mp4 N개
 - music: 전체 길이 mp3/wav 1개
+- lyrics: 훅/벌스 텍스트
 - final: 합성 mp4
 
 ### 출력 메타 예시

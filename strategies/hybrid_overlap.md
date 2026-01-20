@@ -8,7 +8,7 @@
 
 ## 입력/출력
 - 입력: prompt, pdf_paths, options, reference_audio(optional)
-- 출력: 15초 클립 N개 + 최종 합성 mp4
+- 출력: 15초 클립 N개 + 가사 + 최종 합성 mp4
 
 ### 입력 JSON 예시
 ```json

@@ -9,7 +9,7 @@
 
 ## 입력/출력
 - 입력: prompt, pdf_paths, options, reference_images(optional)
-- 출력: 키프레임 이미지 + 15초 클립 N개 + 최종 합성 mp4
+- 출력: 키프레임 이미지 + 가사 + 15초 클립 N개 + 최종 합성 mp4
 
 ### 입력 JSON 예시
 ```json

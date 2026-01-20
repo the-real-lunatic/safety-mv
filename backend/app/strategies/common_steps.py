@@ -22,15 +22,19 @@ def build_providers(mode: str) -> Providers:
 
     if not settings.openai_api_key or not settings.openai_text_model:
         raise PipelineError("OPENAI_API_KEY and OPENAI_TEXT_MODEL required for real mode")
-    if not settings.sora_api_key or not settings.sora_model:
+    if settings.sora_enabled and (not settings.sora_api_key or not settings.sora_model):
         raise PipelineError("SORA_API_KEY and SORA_MODEL required for real mode")
     if not settings.suno_api_key:
         raise PipelineError("SUNO_API_KEY required for real mode")
 
     return Providers(
         openai=OpenAIClient(settings.openai_api_base_url, settings.openai_api_key, settings.openai_text_model),
-        sora=SoraClient(settings.sora_api_base_url, settings.sora_api_key, settings.sora_model),
-        suno=SunoClient(settings.suno_api_base_url, settings.suno_api_key),
+        sora=(
+            SoraClient(settings.sora_api_base_url, settings.sora_api_key, settings.sora_model)
+            if settings.sora_enabled
+            else None
+        ),
+        suno=SunoClient(settings.suno_api_base_url, settings.suno_api_key, settings.suno_model),
     )
 
 
@@ -121,7 +125,7 @@ def generate_clips(
     for scene in scenes:
         prompt = scene.get("prompt") or clip_prompt(scene, scene.get("style", {}))
         if providers.sora is None:
-            results.append({"scene": scene, "video": {"mock": True, "prompt": prompt}})
+            results.append({"scene": scene, "video": {"mock": True, "prompt": prompt, "status": "pending_sora"}})
             continue
         response = providers.sora.generate(prompt, duration_seconds)
         results.append({"scene": scene, "video": response})

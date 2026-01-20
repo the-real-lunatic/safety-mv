@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ router = APIRouter()
 
 _JOBS: dict[UUID, JobRecord] = {}
 _LOCK = threading.Lock()
+_LOG = logging.getLogger("safetymv.jobs")
 
 
 def _now() -> datetime:
@@ -58,6 +60,7 @@ def create_job(payload: JobCreateRequest, background: BackgroundTasks) -> JobRes
     with _LOCK:
         _JOBS[job_id] = record
 
+    _LOG.info("job created", extra={"job_id": str(job_id), "strategy": record.strategy})
     background.add_task(_execute_job, job_id)
     return JobResponse(**record.model_dump())
 
@@ -91,6 +94,7 @@ async def upload_pdfs(files: list[UploadFile] = File(...)) -> dict[str, list[str
         content = await upload.read()
         target.write_bytes(content)
         saved.append(str(target))
+        _LOG.info("pdf uploaded", extra={"upload_name": upload.filename, "path": str(target)})
     return {"pdf_paths": saved}
 
 
@@ -131,7 +135,9 @@ def _execute_job(job_id: UUID) -> None:
         _JOBS[job_id] = record
 
     try:
+        _LOG.info("job running", extra={"job_id": str(job_id), "strategy": record.strategy})
         strategy = get_strategy(record.strategy)
+        _LOG.info("strategy start", extra={"job_id": str(job_id), "strategy": record.strategy})
         pdf_texts = read_pdf_texts(record.pdf_paths)
         context = PipelineContext(
             job_id=record.job_id,
@@ -149,10 +155,15 @@ def _execute_job(job_id: UUID) -> None:
         ]
         record.status = JobStatus.completed
         record.updated_at = _now()
+        _LOG.info(
+            "job completed",
+            extra={"job_id": str(job_id), "strategy": record.strategy, "artifacts": len(record.artifacts)},
+        )
     except Exception as exc:  # noqa: BLE001
         record.status = JobStatus.failed
         record.error = str(exc)
         record.updated_at = _now()
+        _LOG.exception("job failed", extra={"job_id": str(job_id), "strategy": record.strategy})
 
     with _LOCK:
         _JOBS[job_id] = record

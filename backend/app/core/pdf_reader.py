@@ -9,6 +9,10 @@ def read_pdf_texts(pdf_paths: list[str]) -> list[str]:
     if not pdf_paths:
         return []
 
+    import logging
+
+    log = logging.getLogger("safetymv.pdf")
+
     try:
         from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover - import guard
@@ -25,4 +29,5 @@ def read_pdf_texts(pdf_paths: list[str]) -> list[str]:
             page_text = page.extract_text() or ""
             content_parts.append(page_text)
         texts.append("\n".join(content_parts))
+        log.info("pdf parsed", extra={"path": str(path), "chars": len(texts[-1])})
     return texts

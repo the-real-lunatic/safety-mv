@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,11 +16,17 @@ import redis
 
 from .api.routes import jobs_router
 from .core.config import settings
+from .core.minio_storage import ensure_bucket
 
 app = FastAPI(
     title="SafetyMV Backend",
     version="0.1.0",
     description="Infra-only backend with health checks.",
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
 app.add_middleware(
@@ -30,6 +38,20 @@ app.add_middleware(
 )
 
 app.include_router(jobs_router)
+
+
+@app.on_event("startup")
+def _startup_minio() -> None:
+    if not settings.minio_enabled:
+        logging.getLogger("safetymv.minio").info("minio disabled")
+        return
+    try:
+        ensure_bucket(settings.minio_bucket)
+        logging.getLogger("safetymv.minio").info(
+            "minio bucket ready", extra={"bucket": settings.minio_bucket}
+        )
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger("safetymv.minio").exception("minio bucket init failed: %s", exc)
 
 
 def _get_redis_client() -> redis.Redis:
