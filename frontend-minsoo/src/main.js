@@ -1,4 +1,5 @@
 import "./style.css";
+import { renderSuno, shouldContinueSunoPolling } from "./suno.js";
 
 const apiBase = "http://localhost:8000";
 
@@ -135,6 +136,11 @@ document.querySelector("#app").innerHTML = `
               <h4>Selected Concept</h4>
               <div id="selected-concept" class="stack"></div>
             </div>
+            <div class="mini-card">
+              <h4>Suno Audio</h4>
+              <div id="suno-status" class="stack"></div>
+              <div id="suno-tracks" class="stack"></div>
+            </div>
           </div>
         </section>
 
@@ -208,6 +214,8 @@ const keyPointsEl = document.querySelector("#key-points");
 const keywordEvidenceEl = document.querySelector("#keyword-evidence");
 const qaResultsEl = document.querySelector("#qa-results");
 const selectedConceptEl = document.querySelector("#selected-concept");
+const sunoStatusEl = document.querySelector("#suno-status");
+const sunoTracksEl = document.querySelector("#suno-tracks");
 const blueprintScenesEl = document.querySelector("#blueprint-scenes");
 const styleBindEl = document.querySelector("#style-bind");
 const mediaPlanEl = document.querySelector("#media-plan");
@@ -431,6 +439,7 @@ const resetOutputs = () => {
   renderMediaPlan(null);
   resetCharacterPreview();
   renderPev({ concepts: [], qaResults: [], blueprint: null, retryCount: 0 });
+  renderSuno(sunoStatusEl, sunoTracksEl, null);
 };
 
 const renderHitlOptions = (concepts = [], selectedId, enabled) => {
@@ -618,10 +627,13 @@ const pollJob = async (jobId) => {
   }
   const job = await response.json();
   statusEl.textContent = `status: ${job.status} · progress: ${job.progress ?? 0}`;
+  renderSuno(sunoStatusEl, sunoTracksEl, job.suno || null);
   if (job.result) {
     renderFlow(job.result);
   }
-  if (["completed", "hitl_required", "failed"].includes(job.status)) {
+  const isTerminal = ["completed", "hitl_required", "failed"].includes(job.status);
+  const keepPollingForSuno = shouldContinueSunoPolling(job);
+  if (isTerminal && !keepPollingForSuno) {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = null;
     isProcessing = false;

@@ -438,3 +438,75 @@ MV BLUEPRINT
 - 접속:
   - `http://localhost:5174`
 - API Base는 백엔드 주소 (기본 `http://127.0.0.1:8000`)
+
+
+## 전체 구조
+
+참고만 해. 이대로 구현 안할수도 있음
+
+
+┌──────────────┐
+│  N0  USER     │
+└──────┬───────┘
+│ E1  (safety_text + options)
+▼
+┌──────────────┐
+│  N1  UI       │
+│  - input      │
+│  - lyrics pick│
+│  - result view│
+└──────┬───────┘
+│ E2  POST /start_job
+▼조
+┌───────────────────────────┐
+│  N2  ORCHESTRATOR          │
+│  - state, retry, logs      │
+└──────┬────────────────────┘
+│ E3  (LLM call)
+▼
+┌───────────────────────────┐
+│  N3  LYRICS GEN (LLM)      │
+│  - 2 lyric candidates      │
+└──────┬────────────────────┘
+│ E4  lyrics_set[2]
+▼
+┌───────────────────────────┐
+│  N4  QA / SCORE (Python)   │
+│  - keyword coverage        │
+└───┬───────────────┬───────┘
+│ E5a pass      │ E5b fail (missing_keywords)
+▼               ▼
+┌───────────────────────────┐   ┌───────────────────────────┐
+│  N5  HITL PICK (UI)        │   │ (LOOP) back to N3         │
+│  - human selects lyrics   │   │ via N2: retry 1 time      │
+└──────┬────────────────────┘   └───────────┬───────────────┘
+│ E6 selected_id (+edits) │ E5c retry_context
+▼                        ▼
+┌───────────────────────────┐
+│  N2  ORCHESTRATOR          │
+│  - final_lyrics LOCK       │
+└──────┬────────────────────┘
+│ E7 fan-out parallel
+├───────────────┬───────────────────┬─────────────────┐
+▼               ▼                   ▼                 ▼
+┌──────────────┐  ┌──────────────┐   ┌────────────────┐  ┌──────────────┐
+│ N6 CHAR BIBLE │  │ N7 SUNO MUSIC│   │ N8 VIDEO PROMPT │  │ N9 SORA GEN   │
+│ (LLM)         │  │ (API)        │   │ BUILDER         │  │ (API)         │
+└──────┬───────┘  └──────┬───────┘   └──────┬─────────┘  └──────┬───────┘
+│ E8              │ E9               │ E10                │ E12
+▼                 ▼                  ▼                    ▼
+char_bible.json   music_track.mp3     sora_jobs.json      clips_01..K.mp4
+└───────────────┬───────────────────┘
+│ E11 (char_bible merge)
+▼
+(included in sora_jobs)
+│
+▼
+┌───────────────────────────┐
+│  N10 RENDER/EDIT (ffmpeg)  │
+└──────┬────────────────────┘
+│ E13 final_music_video.mp4
+▼
+┌──────────────┐
+│ N11 RESULT UI │
+└──────────────┘
