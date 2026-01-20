@@ -9,6 +9,7 @@ const videoVibes = [
   { id: "corporate", label: "Corporate" },
   { id: "modern", label: "Modern" },
   { id: "cute", label: "Cute" },
+  { id: "fun", label: "Fun" },
 ] as const;
 
 type VideoVibeId = (typeof videoVibes)[number]["id"];
@@ -22,12 +23,24 @@ const musicGenres = [
   { id: "rock", label: "락" },
   { id: "dance", label: "댄스" },
   { id: "kpop", label: "케이팝" },
+  { id: "classical", label: "클래식" },
 ] as const;
 
 type MusicGenreId = (typeof musicGenres)[number]["id"];
 
 export function VideoGeneratorForm() {
   const router = useRouter();
+
+  type JobStatus =
+  | { status: "lyrics_processing"; progress?: number }
+  | { status: "lyrics_done"; lyrics: { v1: string; v2: string } }
+  | { status: "error"; message?: string };
+
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
+  const pollingRef = useRef<number | null>(null);
+
 
   const [guidelines, setGuidelines] = useState("");
   const [length, setLength] = useState<"30s" | "45s">("30s");
@@ -44,6 +57,51 @@ export function VideoGeneratorForm() {
     };
   }, []);
 
+  async function fetchJobStatus(jobId: string): Promise<JobStatus> {
+  const res = await fetch(`/job_status/${jobId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch job status");
+  return res.json();
+}
+
+  const startPolling = (id: string) => {
+  if (pollingRef.current) return;
+
+  pollingRef.current = window.setInterval(async () => {
+    try {
+      const status = await fetchJobStatus(id);
+      setJobStatus(status);
+
+      if (status.status === "lyrics_done") {
+        sessionStorage.setItem("lyrics_v1", status.lyrics.v1);
+        sessionStorage.setItem("lyrics_v2", status.lyrics.v2);
+
+        stopPolling();
+        router.push("/lyricselection");
+      }
+
+      if (status.status === "error") {
+        throw new Error(status.message || "Job failed");
+      }
+    } catch (e) {
+      console.error(e);
+      stopPolling();
+      setIsGenerating(false);
+    }
+  }, 1000);
+};
+
+const stopPolling = () => {
+  if (pollingRef.current) {
+    window.clearInterval(pollingRef.current);
+    pollingRef.current = null;
+  }
+};
+
+useEffect(() => {
+  return () => stopPolling();
+}, []);
+
+
   const handleStyleToggle = (styleId: VideoVibeId) => {
     setSelectedStyles((prev) => {
       if (prev.includes(styleId)) return prev.filter((id) => id !== styleId);
@@ -56,69 +114,66 @@ export function VideoGeneratorForm() {
   };
   
   const isFormValid = useMemo(() => {
-    return guidelines.trim().length > 0 && selectedStyles.length > 0 && selectedGenres;
-  }, [guidelines, selectedStyles, selectedGenres]);
+    return (
+      pdfFile !== null &&
+      selectedStyles.length > 0 &&
+      selectedGenres
+    );
+  }, [pdfFile, selectedStyles, selectedGenres]);
+
 
   const helperText = useMemo(() => {
-    if (!guidelines.trim()) return "Enter safety guidelines to continue";
+    if (!pdfFile) return "Upload a PDF file to continue";
     if (selectedStyles.length === 0) return "Select at least one visual style";
     if (!selectedGenres) return "Select music genre";
     return "";
-  }, [guidelines, selectedStyles, selectedGenres]);
-
+  }, [pdfFile, selectedStyles, selectedGenres]);
   const handleGenerate = async () => {
-    if (!isFormValid || isGenerating) return;
+  if (!isFormValid || isGenerating || !pdfFile) return;
 
-    setIsGenerating(true);
+  setIsGenerating(true);
 
-    window.setTimeout(() => {
-      setIsGenerating(false);
-      console.log("Video generated with:", {
-        guidelines,
-        length,
-        selectedStyles,
-        selectedGenres,
-        additionalRequirements,
-      });
-    }, 2000);
-    const payload = {
-      guidelines,
-      length,
-      selectedStyles,
-      selectedGenres,
-      additionalRequirements,
-    };
+  const formData = new FormData();
+  formData.append("guidelines_pdf", pdfFile);
+  formData.append("length", length);
+  formData.append("selectedStyles", JSON.stringify(selectedStyles));
+  if (!selectedGenres) {
+    throw new Error("selectedGenres is missing");
+  }
+  formData.append("selectedGenres", selectedGenres);
 
-    try {
-      const res = await fetch("/post_job", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+  formData.append("additionalRequirements", additionalRequirements);
+  
+  console.log("Submitting form data:", {
+    length,
+    selectedStyles,
+    selectedGenres,
+    additionalRequirements,
+    pdfFileName: pdfFile.name,
+  });
+  
 
-      if (!res.ok) {
-        // 서버가 에러 바디를 json/text로 줄 수도 있으니 안전 처리
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `POST /post_job failed (${res.status})`);
-      }
+  try {
+    const res = await fetch("/post_job", {
+      method: "POST",
+      body: formData,
+    });
 
-      // (선택) jobId를 받는다면 나중에 polling 등에 사용 가능
-      // const data = await res.json().catch(() => null);
-      // const jobId = data?.job_id;
+    if (!res.ok) throw new Error("post_job failed");
 
-      // 지금은 "10초 후 이동" 임시 로직
-      timeoutRef.current = window.setTimeout(() => {
-        router.push("/lyricselection");
-      }, 10_000);
-    } catch (err: any) {
-      console.error("Error posting job:", err);
-      setIsGenerating(false);
-      // todo! 일단 넘어감. 백 연결 후 삭제
-      router.push("/lyricselection");
-      return;
-    }
+    const data = await res.json();
+    const id = data.job_id;
+    if (!id) throw new Error("job_id missing");
 
-  };
+    setJobId(id);
+    sessionStorage.setItem("job_id", id);
+
+    startPolling(id);
+  } catch (e) {
+    console.error(e);
+    setIsGenerating(false);
+  }
+};
 
   
 
@@ -142,29 +197,28 @@ export function VideoGeneratorForm() {
       </header>
 
       {/* Card: Guidelines */}
-      <section className="rounded-2xl border border-gray-800/70 bg-[#121217] p-5 md:p-6 shadow-sm">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <label htmlFor="guidelines" className="text-gray-200 text-sm">
-              Safety Guidelines
-            </label>
-            <p className="text-gray-500 text-sm mt-1">
-              절차, 장비, 금지사항, 비상대응 등을 구체적으로 써줘.
-            </p>
-          </div>
-          <span className="text-xs text-gray-500">
-            {guidelines.trim().length}/2000
-          </span>
-        </div>
+      <section className="rounded-2xl border border-gray-800/70 bg-[#121217] p-5 md:p-6 shadow-sm space-y-3">
+      <label className="text-gray-200 text-sm">Safety Guidelines (PDF)</label>
 
-        <textarea
-          id="guidelines"
-          value={guidelines}
-          onChange={(e) => setGuidelines(e.target.value.slice(0, 2000))}
-          placeholder="Enter your safety guidelines here..."
-          className="mt-4 min-h-[190px] w-full resize-none rounded-2xl bg-[#0f0f14] border border-gray-800 px-4 py-3 text-gray-100 placeholder:text-gray-600 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/15"
-        />
-      </section>
+      <input
+        type="file"
+        accept="application/pdf"
+        onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+        className="block w-full text-sm text-gray-400
+          file:mr-4 file:py-2 file:px-4
+          file:rounded-xl file:border-0
+          file:text-sm file:font-medium
+          file:bg-cyan-500/10 file:text-cyan-300
+          hover:file:bg-cyan-500/20"
+      />
+
+      {pdfFile && (
+        <p className="text-xs text-gray-500">
+          Selected: {pdfFile.name}
+        </p>
+      )}
+    </section>
+
 
       {/* Card: Options */}
       <section className="rounded-2xl border border-gray-800/70 bg-[#121217] p-5 md:p-6 space-y-6 shadow-sm">
