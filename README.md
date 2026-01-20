@@ -101,6 +101,9 @@
 첫 번째로, 생성된 가사와 뮤직비디오 시안이 **실제 입력 문서의 내용과 일치하는지 검증**하기 위해  
 PEV 구조를 도입했습니다.
 
+<img width="520" height="650" alt="image" src="https://github.com/user-attachments/assets/08995a54-a72e-4b03-aa0c-67351c5513f0" />
+
+
 - **Propose**  
   - 하나의 결과를 바로 생성하지 않고,  
     가사 + 영상 시안을 **여러 개(K개)** 후보로 생성합니다.
@@ -121,6 +124,9 @@ PEV 구조를 도입했습니다.
 
 ### 2. Human-in-the-Loop (HITL)
 
+<img width="528" height="768" alt="image" src="https://github.com/user-attachments/assets/33b9d5e4-3d2c-486d-bdb8-ee1d2e39710e" />
+
+
 두 번째로, AI가 만든 결과를 **사람이 직접 평가하고 선택할 수 있도록**  
 Human-in-the-Loop 패턴을 필수 단계로 넣었습니다.
 
@@ -135,6 +141,9 @@ Human-in-the-Loop 패턴을 필수 단계로 넣었습니다.
 ---
 
 ### 3. Worker–Manager 패턴 (멀티모달 한계 극복)
+
+<img width="504" height="660" alt="image" src="https://github.com/user-attachments/assets/f3d8063a-526b-4775-b5ac-924cb3dcfcb6" />
+
 
 마지막으로, 현재 멀티모달 모델의 한계를 고려해  
 Worker–Manager 패턴을 적용했습니다.
@@ -168,6 +177,11 @@ Worker–Manager 패턴을 적용했습니다.
 
 > 단일 에이전트가 “잘 만들어주길 기대하는 것”이 아니라,  
 > 여러 에이전트가 협업하며 **신뢰 가능한 결과에 수렴하도록 설계**했습니다.
+
+### 전체 파이프라인
+
+<img width="1536" height="1024" alt="ChatGPT Image 2026년 1월 20일 오후 04_57_30" src="https://github.com/user-attachments/assets/f464846f-a258-4321-8df7-8cc5e9a8420f" />
+
 
 ## 🏁 결론
 
