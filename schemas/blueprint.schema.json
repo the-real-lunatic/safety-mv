@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MVBlueprint",
+  "type": "object",
+  "required": ["duration", "scenes"],
+  "properties": {
+    "duration": { "type": "number", "minimum": 1 },
+    "scenes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scene_id", "time_range", "lyrics", "visual", "audio"],
+        "properties": {
+          "scene_id": { "type": "string" },
+          "time_range": {
+            "type": "object",
+            "required": ["start", "end"],
+            "properties": {
+              "start": { "type": "number" },
+              "end": { "type": "number" }
+            }
+          },
+          "lyrics": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" }
+            }
+          },
+          "visual": {
+            "type": "object",
+            "properties": {
+              "action": { "type": "string" },
+              "camera": { "type": "string" }
+            }
+          },
+          "audio": {
+            "type": "object",
+            "properties": {
+              "music_section": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

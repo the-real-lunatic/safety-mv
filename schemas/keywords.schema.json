@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KeywordExtraction",
+  "type": "object",
+  "required": ["keywords", "key_points"],
+  "properties": {
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "key_points": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "keyword_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["keyword", "sources"],
+        "properties": {
+          "keyword": { "type": "string" },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["chunk_index", "text"],
+              "properties": {
+                "page_number": { "type": "integer", "minimum": 0 },
+                "start_offset": { "type": "integer", "minimum": 0 },
+                "end_offset": { "type": "integer", "minimum": 0 },
+                "text": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MVConcept",
+  "type": "object",
+  "required": ["concept_id", "lyrics", "mv_script"],
+  "properties": {
+    "concept_id": { "type": "string" },
+    "lyrics": { "type": "string" },
+    "mv_script": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["start", "end", "description"],
+        "properties": {
+          "start": { "type": "number", "minimum": 0 },
+          "end": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" },
+          "mood": { "type": "string" },
+          "lyrics_excerpt": { "type": "string" }
+        }
+      }
+    }
+  }
+}

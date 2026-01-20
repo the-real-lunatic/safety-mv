@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HITLResult",
+  "type": "object",
+  "required": ["selected_concept_id"],
+  "properties": {
+    "selected_concept_id": { "type": "string" },
+    "edited_lyrics": { "type": "string" },
+    "edited_mv_script": {
+      "type": "array",
+      "items": { "$ref": "concept.schema.json#/properties/mv_script/items" }
+    }
+  }
+}

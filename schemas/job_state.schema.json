@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JobState",
+  "type": "object",
+  "required": ["job_id", "state", "artifacts"],
+  "properties": {
+    "job_id": { "type": "string" },
+    "state": {
+      "type": "string",
+      "enum": [
+        "INIT",
+        "CONCEPT_GEN",
+        "QA",
+        "HITL",
+        "LOCK_BLUEPRINT_CORE",
+        "STYLE_BIND",
+        "PARALLEL_MEDIA_GEN",
+        "RENDER",
+        "DONE"
+      ]
+    },
+    "retry_count": { "type": "integer", "minimum": 0 },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

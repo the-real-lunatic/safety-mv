@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QAResult",
+  "type": "object",
+  "required": ["result", "score"],
+  "properties": {
+    "result": { "type": "string", "enum": ["pass", "fail"] },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "missing_keywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "structural_issues": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
