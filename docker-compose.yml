@@ -1,13 +1,13 @@
 version: "3.9"
 
 services:
-  frontend:
-    build:
-      context: ./frontend-suno
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "3000:80"
+  #   depends_on:
+  #     - backend
   
   frontend-minsoo:
     build:

@@ -430,15 +430,6 @@ MV BLUEPRINT
   - 오디오: `suno/{job_id}/{task_id}/{track_id}.mp3`
   - 커버: `suno/{job_id}/{task_id}/{track_id}.jpg`
 
-### 테스트 (frontend-suno)
-- 프론트 경로: `frontend-suno`
-- 실행:
-  - `npm install`
-  - `npm run dev`
-- 접속:
-  - `http://localhost:5174`
-- API Base는 백엔드 주소 (기본 `http://127.0.0.1:8000`)
-
 
 ## 전체 구조
 
