@@ -193,22 +193,31 @@ Worker–Manager 패턴을 적용했습니다.
 ## ▶️ 실행 방법 (Local)
 
 ```bash
-# 1. 환경 변수 설정
-export OPENAI_API_KEY=your_api_key_here
+# 1) 환경 변수 설정 (.env)
+GPT_API_KEY=your_api_key_here
+SORA_API_KEY=your_api_key_here
+SUNO_API_KEY=your_api_key_here
+SORA_API_BASE=https://api.openai.com/v1
+SORA_IMAGE_ENDPOINT=/images/generations
+SORA_VIDEO_ENDPOINT=/videos
 
-# 2. Stage-1 실행 (가사 + 영상 시안 생성)
-python -m app.run_stage1_iter \
-  --pdf path/to/document.pdf \
-  --vibe minimal \
-  --vibe cute \
-  --genre 트로트 \
-  --extra "신입이 이해하기 쉽게"
+# 2) 실행
+docker compose up --build
 
-# 3. 결과물 확인
-artifacts/{job_id}/
-  ├── extracted_text.txt
-  ├── document_struct.json
-  ├── candidate_pool_round*.json
-  ├── qa_report_round*.json
-  ├── final_candidates.json
-  └── locked_final.json
+# 3) Job 생성 (예: 텍스트)
+curl -s -X POST http://localhost:8000/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "guidelines":"작업 전 보호구를 착용한다. 위험 구역 출입 금지.",
+    "length":"30s",
+    "selectedStyles":["minimal","modern"],
+    "selectedGenres":"hiphop",
+    "additionalRequirements":"가사는 한국어",
+    "llm_model":"gpt-4o-mini",
+    "llm_temperature":0.4,
+    "hitl_mode":"required"
+  }'
+
+# 4) 상태 확인
+curl -s http://localhost:8000/jobs/{job_id}
+```
