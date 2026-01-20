@@ -149,14 +149,6 @@ document.querySelector("#app").innerHTML = `
               <div id="hitl-options" class="stack"></div>
             </div>
             <div class="hitl-edit">
-              <label class="field">
-                <span>Edited Lyrics</span>
-                <textarea id="hitl-lyrics" rows="6" placeholder="수정한 가사를 입력하세요."></textarea>
-              </label>
-              <label class="field">
-                <span>Edited MV Script (JSON)</span>
-                <textarea id="hitl-script" rows="8" placeholder='[{"start":0,"end":5,"description":"..."}]'></textarea>
-              </label>
               <button id="submit-hitl" type="button">Submit HITL</button>
               <p id="hitl-hint" class="hint">HITL 모드가 Required일 때만 제출이 가능합니다.</p>
             </div>
@@ -224,8 +216,6 @@ const characterPreviewEl = document.querySelector("#character-preview");
 const characterPreviewStatusEl = document.querySelector("#character-preview-status");
 const hitlStatusEl = document.querySelector("#hitl-status");
 const hitlOptionsEl = document.querySelector("#hitl-options");
-const hitlLyricsEl = document.querySelector("#hitl-lyrics");
-const hitlScriptEl = document.querySelector("#hitl-script");
 const hitlSubmitBtn = document.querySelector("#submit-hitl");
 const hitlHintEl = document.querySelector("#hitl-hint");
 
@@ -463,12 +453,6 @@ const renderHitlOptions = (concepts = [], selectedId, enabled) => {
     wrapper.append(input, text);
     hitlOptionsEl.appendChild(wrapper);
   });
-
-  const initial = concepts.find((c) => c.concept_id === selectedId) || concepts[0];
-  if (initial) {
-    hitlLyricsEl.value = initial.lyrics || "";
-    hitlScriptEl.value = JSON.stringify(initial.mv_script || [], null, 2);
-  }
 };
 
 const renderFlow = (data) => {
@@ -742,16 +726,6 @@ const submitHitl = async () => {
     hitlStatusEl.textContent = "컨셉 선택 필요";
     return;
   }
-  let mvScript = null;
-  const rawScript = hitlScriptEl.value.trim();
-  if (rawScript) {
-    try {
-      mvScript = JSON.parse(rawScript);
-    } catch (error) {
-      hitlStatusEl.textContent = `MV Script JSON 오류: ${error.message}`;
-      return;
-    }
-  }
   hitlSubmitBtn.disabled = true;
   hitlStatusEl.textContent = "HITL 제출 중...";
   try {
@@ -761,8 +735,6 @@ const submitHitl = async () => {
       body: JSON.stringify({
         job_id: jobId,
         selected_concept_id: selectedInput.value,
-        edited_lyrics: hitlLyricsEl.value || null,
-        edited_mv_script: mvScript,
       }),
     });
     if (!response.ok) {
