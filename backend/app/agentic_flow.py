@@ -246,6 +246,9 @@ class SoraClient:
         self.asset_endpoint = os.getenv("SORA_ASSET_ENDPOINT", "/images/{asset_id}")
         self.image_model = os.getenv("SORA_IMAGE_MODEL", "gpt-image-1.5")
         self.image_size = os.getenv("SORA_IMAGE_SIZE", "1024x1024")
+        self.video_endpoint = os.getenv("SORA_VIDEO_ENDPOINT", "/videos")
+        self.video_model = os.getenv("SORA_VIDEO_MODEL", "sora-2")
+        self.video_size = os.getenv("SORA_VIDEO_SIZE", "720x1280")
         self.timeout = float(os.getenv("SORA_TIMEOUT", "60"))
         self._is_openai_images = "api.openai.com" in self.base_url
 
@@ -406,6 +409,126 @@ class SoraClient:
             return response.content, content_type
         except Exception:  # noqa: BLE001
             return None, None
+
+    def create_video(
+        self,
+        *,
+        prompt: str,
+        reference_image: bytes | None,
+        seconds: str,
+        size: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.api_key or not self.base_url:
+            return {
+                "status": "mock",
+                "video_id": f"video_{uuid4().hex[:10]}",
+                "detail": "SORA_API_KEY or SORA_API_BASE missing",
+            }
+        url = f"{self.base_url}{self.video_endpoint}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        data = {
+            "prompt": prompt,
+            "model": self.video_model,
+            "seconds": str(seconds),
+            "size": size or self.video_size,
+        }
+        files = None
+        if reference_image:
+            files = {
+                "input_reference": ("character.png", reference_image, "image/png"),
+            }
+        try:
+            response = httpx.post(url, headers=headers, data=data, files=files, timeout=self.timeout)
+            response.raise_for_status()
+            payload = response.json()
+            return {
+                "status": payload.get("status") or "queued",
+                "video_id": payload.get("id"),
+                "response": payload,
+            }
+        except httpx.HTTPStatusError as exc:
+            return {
+                "status": "error",
+                "video_id": None,
+                "detail": exc.response.text,
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "status": "error",
+                "video_id": None,
+                "detail": str(exc),
+            }
+
+    def remix_video(self, video_id: str, prompt: str) -> dict[str, Any]:
+        if not self.api_key or not self.base_url:
+            return {
+                "status": "mock",
+                "video_id": f"video_{uuid4().hex[:10]}",
+                "detail": "SORA_API_KEY or SORA_API_BASE missing",
+            }
+        url = f"{self.base_url}{self.video_endpoint}/{video_id}/remix"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        data = {"prompt": prompt}
+        try:
+            response = httpx.post(url, headers=headers, data=data, timeout=self.timeout)
+            response.raise_for_status()
+            payload = response.json()
+            return {
+                "status": payload.get("status") or "queued",
+                "video_id": payload.get("id"),
+                "response": payload,
+            }
+        except httpx.HTTPStatusError as exc:
+            return {
+                "status": "error",
+                "video_id": None,
+                "detail": exc.response.text,
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "status": "error",
+                "video_id": None,
+                "detail": str(exc),
+            }
+
+    def retrieve_video(self, video_id: str) -> dict[str, Any]:
+        if not self.api_key or not self.base_url:
+            return {"status": "mock", "video_id": video_id, "detail": "missing api key"}
+        url = f"{self.base_url}{self.video_endpoint}/{video_id}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        try:
+            response = httpx.get(url, headers=headers, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            return {
+                "status": data.get("status"),
+                "video_id": data.get("id") or video_id,
+                "progress": data.get("progress"),
+                "response": data,
+            }
+        except httpx.HTTPStatusError as exc:
+            return {"status": "error", "video_id": video_id, "detail": exc.response.text}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error", "video_id": video_id, "detail": str(exc)}
+
+    def download_video_content(self, video_id: str) -> dict[str, Any]:
+        if not self.api_key or not self.base_url:
+            return {"status": "mock", "video_id": video_id, "detail": "missing api key"}
+        url = f"{self.base_url}{self.video_endpoint}/{video_id}/content"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        try:
+            response = httpx.get(url, headers=headers, timeout=self.timeout)
+            response.raise_for_status()
+            return {
+                "status": "downloaded",
+                "video_id": video_id,
+                "content": response.content,
+                "content_type": response.headers.get("content-type") or "video/mp4",
+            }
+        except httpx.HTTPStatusError as exc:
+            return {"status": "error", "video_id": video_id, "detail": exc.response.text}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error", "video_id": video_id, "detail": str(exc)}
 
 
 class AgenticFlow:

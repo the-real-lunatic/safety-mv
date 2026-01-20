@@ -62,7 +62,10 @@ export const renderSuno = (statusEl, tracksEl, suno) => {
 };
 
 export const shouldContinueSunoPolling = (job) => {
-  if (!job || job.status !== "completed") {
+  if (!job || !job.status) {
+    return false;
+  }
+  if (!job.status.startsWith("media")) {
     return false;
   }
   const status = job.suno?.status;

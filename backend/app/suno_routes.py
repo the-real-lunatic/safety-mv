@@ -246,6 +246,8 @@ def _handle_suno_complete(task_id: str, items: list[dict[str, Any]], job_id: str
 
     task = _update_suno_task(task_id, status="stored", tracks=stored_tracks)
     if job_id:
-        from .main import _update_job
+        from .main import _update_job, _mark_media_status, _try_finalize_render
 
         _update_job(job_id, suno={"task_id": task_id, "status": task.get("status"), "tracks": stored_tracks})
+        _mark_media_status(job_id)
+        _try_finalize_render(job_id)

@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import json
 import os
+import time
+import tempfile
+import subprocess
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 import base64
+import httpx
 from minio import Minio
 from pydantic import BaseModel, Field
 import redis
@@ -109,6 +114,20 @@ def _get_minio_client() -> Minio:
         secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
         secure=os.getenv("MINIO_SECURE", "false").lower() == "true",
     )
+
+
+def _ensure_bucket(bucket: str) -> None:
+    client = _get_minio_client()
+    if not client.bucket_exists(bucket):
+        client.make_bucket(bucket)
+
+
+def _presign_minio_object(bucket: str, key: str, expiry_seconds: int = 3600) -> str | None:
+    client = _get_minio_client()
+    try:
+        return client.presigned_get_object(bucket, key, expires=expiry_seconds)
+    except Exception:
+        return None
 
 
 class PreviewFlowConfig(BaseModel):
@@ -536,15 +555,30 @@ def get_job(job_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="job not found")
     result = job.get("result") or {}
     artifacts = result.get("job", {}).get("artifacts", {}) or {}
-    response_payload = {
-        "job_id": job.get("job_id", job_id),
-        "status": job.get("status"),
-        "progress": job.get("progress"),
-        "result": {
+    status = job.get("status")
+    public_result = None
+    if status == "hitl_required":
+        public_result = {
             "concepts": artifacts.get("concepts") or [],
             "qa_results": artifacts.get("qa_results") or [],
             "selected_concept": artifacts.get("selected_concept"),
-        },
+        }
+    elif status in {"completed", "media_running", "media_done"}:
+        public_result = {
+            "selected_concept": artifacts.get("selected_concept"),
+            "blueprint": artifacts.get("blueprint"),
+            "style": artifacts.get("style"),
+            "media_plan": artifacts.get("media_plan"),
+            "character_asset": artifacts.get("character_asset"),
+            "video_jobs": artifacts.get("video_jobs"),
+            "suno": job.get("suno"),
+            "output_url": artifacts.get("output_url"),
+        }
+    response_payload = {
+        "job_id": job.get("job_id", job_id),
+        "status": status,
+        "progress": job.get("progress"),
+        "result": public_result,
         "error": job.get("error"),
     }
     return response_payload
@@ -681,6 +715,301 @@ def _extract_sentence(text: str, pos: int) -> str:
     return text[start:end].strip()
 
 
+def _normalize_video_seconds(duration: float) -> str:
+    if duration <= 4:
+        return "4"
+    if duration <= 8:
+        return "8"
+    return "12"
+
+
+def _build_style_base(style: dict[str, Any]) -> str:
+    character = style.get("character", {}) if isinstance(style, dict) else {}
+    background = style.get("background", {}) if isinstance(style, dict) else {}
+    color = style.get("color", {}) if isinstance(style, dict) else {}
+    return (
+        f"character: {character.get('appearance', '')}, outfit: {character.get('outfit', '')}; "
+        f"background: {background.get('environment', '')}, lighting: {background.get('lighting', '')}; "
+        f"color: {color.get('primary', '')}/{color.get('secondary', '')}"
+    )
+
+
+def _get_character_image_bytes(asset: dict[str, Any]) -> bytes | None:
+    if not asset:
+        return None
+    if asset.get("preview_b64"):
+        try:
+            return base64.b64decode(asset["preview_b64"])
+        except Exception:  # noqa: BLE001
+            return None
+    preview_url = asset.get("preview_url")
+    if isinstance(preview_url, str) and preview_url.startswith("data:image"):
+        try:
+            _, b64 = preview_url.split(",", 1)
+            return base64.b64decode(b64)
+        except Exception:  # noqa: BLE001
+            return None
+    if isinstance(preview_url, str) and preview_url.startswith("http"):
+        try:
+            response = httpx.get(preview_url, timeout=30)
+            response.raise_for_status()
+            return response.content
+        except Exception:  # noqa: BLE001
+            return None
+    return None
+
+
+def _run_media_pipeline(job_id: str) -> None:
+    job = _load_job(job_id)
+    if not job:
+        return
+    result = job.get("result", {}) or {}
+    artifacts = result.get("job", {}).get("artifacts", {}) or {}
+    blueprint = artifacts.get("blueprint")
+    style = artifacts.get("style")
+    if not blueprint or not style:
+        return
+    character_asset = artifacts.get("character_asset", {}) or {}
+    reference_bytes = _get_character_image_bytes(character_asset)
+    if reference_bytes is None:
+        artifacts["video_jobs"] = [
+            {
+                "scene_id": None,
+                "status": "skipped",
+                "detail": "character reference image missing",
+            }
+        ]
+        if "job" in result:
+            result["job"]["artifacts"] = artifacts
+        _update_job(job_id, result=result)
+        _mark_media_status(job_id)
+        return
+    base_style = _build_style_base(style)
+    scenes = blueprint.get("scenes", [])
+    max_workers = min(6, max(1, len(scenes)))
+    video_jobs: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_process_scene_video, job_id, idx, scene, base_style, reference_bytes): scene
+            for idx, scene in enumerate(scenes, start=1)
+        }
+        for future in as_completed(futures):
+            video_jobs.append(future.result())
+    artifacts["video_jobs"] = sorted(video_jobs, key=lambda item: item.get("scene_id") or "")
+    if "job" in result:
+        result["job"]["artifacts"] = artifacts
+    _update_job(job_id, result=result)
+    _mark_media_status(job_id)
+    _try_finalize_render(job_id)
+
+
+def _process_scene_video(
+    job_id: str,
+    index: int,
+    scene: dict[str, Any],
+    base_style: str,
+    reference_bytes: bytes,
+) -> dict[str, Any]:
+    time_range = scene.get("time_range", {}) if isinstance(scene, dict) else {}
+    duration = max(1.0, float(time_range.get("end", 0)) - float(time_range.get("start", 0)))
+    seconds = _normalize_video_seconds(duration)
+    prompt = (
+        f"{base_style}. "
+        f"visual action: {scene.get('visual', {}).get('action', '')}. "
+        f"camera: {scene.get('visual', {}).get('camera', '')}. "
+        f"lyrics: {scene.get('lyrics', {}).get('text', '')}."
+    ).strip()
+    sora = _get_agentic_flow().sora
+    create_resp = sora.create_video(
+        prompt=prompt,
+        reference_image=reference_bytes,
+        seconds=seconds,
+    )
+    video_id = create_resp.get("video_id")
+    status = create_resp.get("status")
+    detail = create_resp.get("detail")
+    scene_id = scene.get("scene_id") or f"scene_{index:02d}"
+    if not video_id or status == "error":
+        return {
+            "scene_id": scene_id,
+            "prompt": prompt,
+            "target_duration_seconds": duration,
+            "requested_seconds": seconds,
+            "status": status or "error",
+            "video_id": video_id,
+            "detail": detail,
+        }
+
+    timeout_seconds = int(os.getenv("SORA_VIDEO_TIMEOUT", "600"))
+    poll_interval = float(os.getenv("SORA_VIDEO_POLL_INTERVAL", "5"))
+    start = time.time()
+    current_status = status
+    while time.time() - start < timeout_seconds:
+        poll = sora.retrieve_video(video_id)
+        current_status = poll.get("status") or current_status
+        if current_status in {"succeeded", "complete", "completed"}:
+            break
+        if current_status in {"failed", "error"}:
+            return {
+                "scene_id": scene_id,
+                "prompt": prompt,
+                "target_duration_seconds": duration,
+                "requested_seconds": seconds,
+                "status": current_status,
+                "video_id": video_id,
+                "detail": poll.get("detail"),
+            }
+        time.sleep(poll_interval)
+
+    download = sora.download_video_content(video_id)
+    if download.get("status") != "downloaded":
+        return {
+            "scene_id": scene_id,
+            "prompt": prompt,
+            "target_duration_seconds": duration,
+            "requested_seconds": seconds,
+            "status": "download_failed",
+            "video_id": video_id,
+            "detail": download.get("detail"),
+        }
+
+    bucket = os.getenv("MINIO_BUCKET_VIDEO", "safety-mv")
+    _ensure_bucket(bucket)
+    key = f"videos/{job_id}/scene_{index:02d}.mp4"
+    content = download["content"]
+    client = _get_minio_client()
+    client.put_object(
+        bucket,
+        key,
+        io.BytesIO(content),
+        length=len(content),
+        content_type=download.get("content_type") or "video/mp4",
+    )
+    return {
+        "scene_id": scene_id,
+        "prompt": prompt,
+        "target_duration_seconds": duration,
+        "requested_seconds": seconds,
+        "status": "stored",
+        "video_id": video_id,
+        "minio_bucket": bucket,
+        "minio_key": key,
+        "minio_url": _presign_minio_object(bucket, key),
+    }
+
+
+def _try_finalize_render(job_id: str) -> None:
+    job = _load_job(job_id)
+    if not job:
+        return
+    result = job.get("result", {}) or {}
+    artifacts = result.get("job", {}).get("artifacts", {}) or {}
+    video_jobs = artifacts.get("video_jobs") or []
+    if not video_jobs:
+        return
+    if any(vjob.get("status") != "stored" for vjob in video_jobs):
+        return
+    suno = job.get("suno") or {}
+    tracks = suno.get("tracks") or []
+    if not tracks:
+        return
+    audio_track = tracks[0]
+    audio_bucket = audio_track.get("minio_bucket") or os.getenv("MINIO_BUCKET_MUSIC", "safety-mv")
+    audio_key = audio_track.get("minio_audio_key")
+    if not audio_key:
+        return
+
+    client = _get_minio_client()
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_paths = []
+            for idx, vjob in enumerate(sorted(video_jobs, key=lambda item: item.get("minio_key", "")), start=1):
+                bucket = vjob.get("minio_bucket") or os.getenv("MINIO_BUCKET_VIDEO", "safety-mv")
+                key = vjob.get("minio_key")
+                if not key:
+                    return
+                local_path = os.path.join(tmpdir, f"scene_{idx:02d}.mp4")
+                client.fget_object(bucket, key, local_path)
+                video_paths.append(local_path)
+
+            audio_path = os.path.join(tmpdir, "music.mp3")
+            client.fget_object(audio_bucket, audio_key, audio_path)
+
+            list_path = os.path.join(tmpdir, "concat.txt")
+            with open(list_path, "w", encoding="utf-8") as handle:
+                for path in video_paths:
+                    handle.write(f"file '{path}'\n")
+
+            concat_path = os.path.join(tmpdir, "concat.mp4")
+            subprocess.run(
+                ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path, "-c", "copy", concat_path],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            output_path = os.path.join(tmpdir, "final.mp4")
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    concat_path,
+                    "-i",
+                    audio_path,
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                    output_path,
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            output_bucket = os.getenv("MINIO_BUCKET_OUTPUT", "safety-mv")
+            _ensure_bucket(output_bucket)
+            output_key = f"outputs/{job_id}/final.mp4"
+            client.fput_object(output_bucket, output_key, output_path, content_type="video/mp4")
+            artifacts["output_url"] = _presign_minio_object(output_bucket, output_key)
+            artifacts["output_key"] = output_key
+            artifacts["output_bucket"] = output_bucket
+            if "job" in result:
+                result["job"]["artifacts"] = artifacts
+            _update_job(job_id, result=result, status="media_done", progress=1.0)
+    except Exception as exc:  # noqa: BLE001
+        _update_job(job_id, error=str(exc))
+
+
+def _mark_media_status(job_id: str) -> None:
+    job = _load_job(job_id)
+    if not job:
+        return
+    if job.get("status") == "media_done":
+        return
+    result = job.get("result", {}) or {}
+    artifacts = result.get("job", {}).get("artifacts", {}) or {}
+    video_jobs = artifacts.get("video_jobs") or []
+    suno_status = (job.get("suno") or {}).get("status")
+    suno_done = suno_status in {"stored", "complete"}
+    if not suno_status:
+        suno_done = True
+    video_done = False
+    if video_jobs:
+        video_done = True
+        for video in video_jobs:
+            status = video.get("status")
+            if status in {"error", "failed"}:
+                video_done = False
+                break
+    if video_done and suno_done and artifacts.get("output_url"):
+        _update_job(job_id, status="media_done", progress=1.0)
+    else:
+        _update_job(job_id, status="media_running", progress=0.85)
+
+
 @app.post("/flow/blueprint/upload")
 async def generate_blueprint_upload(
     file: UploadFile = File(...),
@@ -775,7 +1104,8 @@ def submit_hitl_job(job_id: str, payload: HitlRequest, background_tasks: Backgro
     artifacts["keyword_evidence"] = _build_keyword_evidence_from_pages(keywords, pages)
     if "job" in response:
         response["job"]["artifacts"] = artifacts
-    _update_job(payload.job_id, status="completed", progress=1.0, result=response)
+    _update_job(payload.job_id, status="media_running", progress=0.65, result=response)
+    background_tasks.add_task(_run_media_pipeline, payload.job_id)
     background_tasks.add_task(trigger_suno_for_job, payload.job_id, response)
     return response
 

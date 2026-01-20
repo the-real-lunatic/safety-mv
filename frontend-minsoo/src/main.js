@@ -451,6 +451,10 @@ const renderHitlOptions = (concepts = [], selectedId, enabled) => {
 
 const renderFlow = (data) => {
   if (!data) return;
+  if (!data.job && data.job_id) {
+    renderPublicFlow(data);
+    return;
+  }
   statusEl.textContent = `state: ${data.job?.state || "-"} · retry: ${data.job?.retry_count ?? 0}`;
   flowIdEl.textContent = `job_id: ${data.job?.job_id || "-"}`;
 
@@ -499,6 +503,41 @@ const renderFlow = (data) => {
     ? "선택한 컨셉을 수정한 뒤 Submit 할 수 있습니다."
     : "HITL 모드가 Skip이면 자동으로 진행됩니다.";
   renderHitlOptions(artifacts.concepts || [], hitl.selected_concept_id, requiresHuman);
+};
+
+const renderPublicFlow = (job) => {
+  statusEl.textContent = `status: ${job.status || "-"} · progress: ${job.progress ?? 0}`;
+  flowIdEl.textContent = `job_id: ${job.job_id || "-"}`;
+  const result = job.result || {};
+
+  if (job.status === "hitl_required") {
+    cachedConcepts = result.concepts || [];
+    renderConcepts(result.concepts || []);
+    renderQaResults(result.qa_results || []);
+    renderSelectedConcept(result.selected_concept);
+    renderHitlOptions(result.concepts || [], result.selected_concept?.concept_id, true);
+    hitlStatusEl.textContent = "HITL Required";
+    hitlSubmitBtn.disabled = false;
+    return;
+  }
+
+  if (job.status && job.status.startsWith("media")) {
+    renderSelectedConcept(result.selected_concept);
+    renderBlueprintScenes(result.blueprint);
+    renderStyle(result.style);
+    renderMediaPlan(result.media_plan);
+    const assetId =
+      result.character_asset?.asset_id || result.media_plan?.character_asset_id || null;
+    characterAssetId = assetId;
+    if (assetId) {
+      fetchCharacterBtn.disabled = false;
+      characterPreviewStatusEl.textContent = `character asset: ${assetId}`;
+    } else {
+      fetchCharacterBtn.disabled = true;
+      characterPreviewStatusEl.textContent = "character asset pending";
+    }
+    renderSuno(sunoStatusEl, sunoTracksEl, result.suno || null);
+  }
 };
 
 characterPreviewEl.addEventListener("load", () => {
@@ -606,19 +645,17 @@ pdfInput.addEventListener("change", async (event) => {
 });
 
 const pollJob = async (jobId) => {
-  const response = await fetch(`${apiBase}/jobs/${jobId}/debug`);
+  const response = await fetch(`${apiBase}/jobs/${jobId}`);
   if (!response.ok) {
     throw new Error(`Job error: ${response.status}`);
   }
   const job = await response.json();
   statusEl.textContent = `status: ${job.status} · progress: ${job.progress ?? 0}`;
-  renderSuno(sunoStatusEl, sunoTracksEl, job.suno || null);
-  if (job.result) {
-    renderFlow(job.result);
-  }
-  const isTerminal = ["completed", "hitl_required", "failed"].includes(job.status);
+  renderFlow(job);
+  const isTerminal = ["failed", "media_done"].includes(job.status);
+  const pauseForHitl = job.status === "hitl_required";
   const keepPollingForSuno = shouldContinueSunoPolling(job);
-  if (isTerminal && !keepPollingForSuno) {
+  if ((isTerminal && !keepPollingForSuno) || pauseForHitl) {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = null;
     isProcessing = false;
@@ -655,9 +692,6 @@ const runFlow = async () => {
       formData.append("selectedStyles", styles.join(","));
       formData.append("selectedGenres", genreInput.value);
       formData.append("additionalRequirements", additionalInput.value);
-      formData.append("llm_model", DEFAULT_LLM_MODEL);
-      formData.append("llm_temperature", String(DEFAULT_LLM_TEMPERATURE));
-      formData.append("hitl_mode", DEFAULT_HITL_MODE);
       response = await fetch(`${apiBase}/jobs/upload`, {
         method: "POST",
         body: formData,
@@ -741,6 +775,10 @@ const submitHitl = async () => {
     }
     const data = await response.json();
     renderFlow(data);
+    isProcessing = true;
+    runFlowButton.disabled = true;
+    runFlowButton.textContent = "Processing...";
+    await startPolling(jobId);
   } catch (error) {
     hitlStatusEl.textContent = `HITL 오류: ${error.message}`;
   } finally {
