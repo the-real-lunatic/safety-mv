@@ -26,10 +26,18 @@ class PipelineResult:
 class PipelineContext:
     job_id: UUID
     strategy_id: str
-    safety_text: str
+    prompt: str
+    pdf_paths: list[str]
+    pdf_texts: list[str]
     options: dict[str, Any]
     attachments: dict[str, Any] | None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def combined_text(self) -> str:
+        if not self.pdf_texts:
+            return self.prompt
+        joined = "\n\n".join(text for text in self.pdf_texts if text)
+        return f\"{self.prompt}\\n\\n[PDF]\\n{joined}\"
 
     def ensure_workdir(self) -> Path:
         return ensure_job_dir(self.job_id)

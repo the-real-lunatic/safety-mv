@@ -35,17 +35,18 @@ def build_providers(mode: str) -> Providers:
 
 
 def parse_sentences(context: PipelineContext, providers: Providers) -> list[str]:
+    source_text = context.combined_text()
     if providers.openai is None:
-        text = context.safety_text.replace("\n", " ")
+        text = source_text.replace("\n", " ")
         return [part.strip() for part in text.split(".") if part.strip()]
     prompt = (
         "역할: 안전문서 파서\n"
         "목표: 입력 텍스트를 문장 배열로 분해\n"
         "출력: sentences[] (원문 유지)\n\n"
-        f"safety_text:\n{context.safety_text}\n"
+        f"safety_text:\n{source_text}\n"
     )
     response = providers.openai.responses(prompt)
-    return _extract_list(response, "sentences", fallback=[context.safety_text])
+    return _extract_list(response, "sentences", fallback=[source_text])
 
 
 def extract_actions(sentences: list[str], providers: Providers) -> list[str]:

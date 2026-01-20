@@ -17,7 +17,8 @@ class StrategySmokeTest(unittest.TestCase):
             context = PipelineContext(
                 job_id=uuid4(),
                 strategy_id=strategy_id,
-                safety_text="안전모를 착용한다. 작업 반경을 확보한다.",
+                prompt="안전모를 착용한다. 작업 반경을 확보한다.",
+                pdf_paths=["input/v1.pdf", "input/v2.pdf"],
                 options={"duration_seconds": 30, "mood": "tense", "site_type": "warehouse"},
                 attachments=None,
             )

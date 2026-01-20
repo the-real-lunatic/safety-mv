@@ -8,7 +8,8 @@
 - 전환이 약간 끊겨도 허용 가능한 데모
 
 ## 입력
-- safety_text: 안전 수칙 원문
+- prompt: 텍스트 프롬프트(요약/요청)
+- pdf_paths: 입력 PDF 파일 경로 리스트
 - options: duration_seconds(30/60/90), mood, site_type
 - attachments(선택):
   - reference_images: 캐릭터/복장/색감 고정용
@@ -18,7 +19,8 @@
 ### 입력 JSON 예시
 ```json
 {
-  "safety_text": "지게차 작업자는 안전모를 착용한다...",
+  "prompt": "지게차 안전 수칙을 힙합 MV로 요약해줘",
+  "pdf_paths": ["input/v1.pdf", "input/v2.pdf"],
   "strategy": "parallel_stylelock",
   "options": {
     "duration_seconds": 60,
@@ -38,10 +40,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["safety_text", "strategy", "options"],
+  "required": ["prompt", "pdf_paths", "strategy", "options"],
   "additionalProperties": false,
   "properties": {
-    "safety_text": { "type": "string", "minLength": 1 },
+    "prompt": { "type": "string", "minLength": 1 },
+    "pdf_paths": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "strategy": { "type": "string", "enum": ["parallel_stylelock"] },
     "options": {
       "type": "object",

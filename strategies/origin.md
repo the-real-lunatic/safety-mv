@@ -12,7 +12,8 @@
 ### 입력 (개념적)
 ```json
 {
-  "safety_text": "string",
+  "prompt": "string",
+  "pdf_paths": ["input/v1.pdf"],
   "strategy": "origin",
   "options": { "duration_seconds": 60, "mood": "string", "site_type": "string" }
 }

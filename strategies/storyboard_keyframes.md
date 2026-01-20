@@ -8,13 +8,14 @@
 - 추가 비용을 감수할 수 있을 때
 
 ## 입력/출력
-- 입력: safety_text, options, reference_images(optional)
+- 입력: prompt, pdf_paths, options, reference_images(optional)
 - 출력: 키프레임 이미지 + 15초 클립 N개 + 최종 합성 mp4
 
 ### 입력 JSON 예시
 ```json
 {
-  "safety_text": "이상 소음 발생 시 즉시 중지...",
+  "prompt": "이상 소음 발생 시 중지 수칙을 요약해줘",
+  "pdf_paths": ["input/v1.pdf", "input/v2.pdf"],
   "strategy": "storyboard_keyframes",
   "options": {"duration_seconds": 60, "mood": "clear"},
   "attachments": {"reference_images": ["minio://refs/warehouse_palette.png"]}
@@ -26,10 +27,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["safety_text", "strategy", "options"],
+  "required": ["prompt", "pdf_paths", "strategy", "options"],
   "additionalProperties": false,
   "properties": {
-    "safety_text": { "type": "string", "minLength": 1 },
+    "prompt": { "type": "string", "minLength": 1 },
+    "pdf_paths": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "strategy": { "type": "string", "enum": ["storyboard_keyframes"] },
     "options": {
       "type": "object",

@@ -8,13 +8,14 @@
 - 속도/비용보다 품질이 중요한 경우
 
 ## 입력/출력
-- 입력: safety_text, options, reference_media(optional)
+- 입력: prompt, pdf_paths, options, reference_media(optional)
 - 출력: 15초 클립 N개 + 최종 합성 mp4
 
 ### 입력 JSON 예시
 ```json
 {
-  "safety_text": "화물 고정 후 이동한다...",
+  "prompt": "화물 고정 이동 수칙을 요약해줘",
+  "pdf_paths": ["input/v1.pdf", "input/v2.pdf"],
   "strategy": "video_chain",
   "options": {"duration_seconds": 60, "mood": "cinematic"},
   "attachments": {"reference_videos": ["minio://refs/camera_follow.mp4"]}
@@ -26,10 +27,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["safety_text", "strategy", "options"],
+  "required": ["prompt", "pdf_paths", "strategy", "options"],
   "additionalProperties": false,
   "properties": {
-    "safety_text": { "type": "string", "minLength": 1 },
+    "prompt": { "type": "string", "minLength": 1 },
+    "pdf_paths": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "strategy": { "type": "string", "enum": ["video_chain"] },
     "options": {
       "type": "object",

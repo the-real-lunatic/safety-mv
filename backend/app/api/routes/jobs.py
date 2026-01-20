@@ -43,7 +43,8 @@ def create_job(payload: JobCreateRequest, background: BackgroundTasks) -> JobRes
         job_id=job_id,
         status=JobStatus.queued,
         strategy=payload.strategy,
-        safety_text=payload.safety_text,
+        prompt=payload.prompt,
+        pdf_paths=payload.pdf_paths,
         created_at=now,
         updated_at=now,
         options=payload.options,
@@ -105,7 +106,8 @@ def _execute_job(job_id: UUID) -> None:
         context = PipelineContext(
             job_id=record.job_id,
             strategy_id=record.strategy,
-            safety_text=record.safety_text,
+            prompt=record.prompt,
+            pdf_paths=record.pdf_paths,
             options=record.options.model_dump(),
             attachments=record.attachments.model_dump() if record.attachments else None,
         )

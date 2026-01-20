@@ -7,13 +7,14 @@
 - 오디오 싱크가 매우 중요하지만, 순차 생성은 피하고 싶을 때
 
 ## 입력/출력
-- 입력: safety_text, options, reference_audio(optional)
+- 입력: prompt, pdf_paths, options, reference_audio(optional)
 - 출력: 15초 클립 N개 + 최종 합성 mp4
 
 ### 입력 JSON 예시
 ```json
 {
-  "safety_text": "사람 보이면 멈춰라...",
+  "prompt": "사람 보이면 멈춰라 수칙을 요약해줘",
+  "pdf_paths": ["input/v1.pdf", "input/v2.pdf"],
   "strategy": "mix_audio_anchor",
   "options": {"duration_seconds": 60, "mood": "tense"},
   "attachments": {"reference_audio": ["minio://refs/tempo_95bpm.wav"]}
@@ -25,10 +26,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["safety_text", "strategy", "options"],
+  "required": ["prompt", "pdf_paths", "strategy", "options"],
   "additionalProperties": false,
   "properties": {
-    "safety_text": { "type": "string", "minLength": 1 },
+    "prompt": { "type": "string", "minLength": 1 },
+    "pdf_paths": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "strategy": { "type": "string", "enum": ["mix_audio_anchor"] },
     "options": {
       "type": "object",

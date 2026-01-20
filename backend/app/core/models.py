@@ -22,7 +22,8 @@ class JobAttachments(BaseModel):
 
 
 class JobCreateRequest(BaseModel):
-    safety_text: str = Field(..., min_length=1)
+    prompt: str = Field(..., min_length=1)
+    pdf_paths: list[str] = Field(default_factory=list)
     strategy: str = Field("parallel_stylelock")
     options: JobOptions = Field(default_factory=JobOptions)
     attachments: JobAttachments | None = None
@@ -38,7 +39,8 @@ class JobRecord(BaseModel):
     job_id: UUID
     status: JobStatus
     strategy: str
-    safety_text: str
+    prompt: str
+    pdf_paths: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     options: JobOptions
@@ -51,7 +53,8 @@ class JobResponse(BaseModel):
     job_id: UUID
     status: JobStatus
     strategy: str
-    safety_text: str | None = None
+    prompt: str | None = None
+    pdf_paths: list[str] | None = None
     created_at: datetime
     updated_at: datetime
     options: JobOptions | None = None
