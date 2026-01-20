@@ -10,7 +10,8 @@ import io
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+import base64
 from minio import Minio
 from pydantic import BaseModel, Field
 import redis
@@ -530,6 +531,63 @@ def get_job(job_id: str) -> dict[str, Any]:
     return job
 
 
+def _resolve_character_asset(job: dict[str, Any]) -> dict[str, Any]:
+    result = job.get("result", {}) or {}
+    artifacts = result.get("job", {}).get("artifacts", {}) or {}
+    asset = artifacts.get("character_asset", {}) or {}
+    media_plan = artifacts.get("media_plan", {}) or {}
+    asset_id = asset.get("asset_id") or media_plan.get("character_asset_id")
+    return {"asset_id": asset_id, "asset": asset}
+
+
+@app.get("/jobs/{job_id}/character")
+def get_character_asset(job_id: str) -> dict[str, Any]:
+    job = _load_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    resolved = _resolve_character_asset(job)
+    asset_id = resolved.get("asset_id")
+    if not asset_id:
+        raise HTTPException(status_code=404, detail="character asset not found")
+    asset = resolved.get("asset", {})
+    if asset.get("preview_url"):
+        return {
+            "asset_id": asset_id,
+            "status": asset.get("status"),
+            "preview_url": asset.get("preview_url"),
+        }
+    sora_response = _get_agentic_flow().sora.get_asset(asset_id)
+    preview_url = sora_response.get("url") or asset.get("preview_url")
+    status = sora_response.get("status") or asset.get("status")
+    payload = {
+        "asset_id": asset_id,
+        "status": status,
+        "preview_url": preview_url,
+    }
+    if sora_response.get("detail"):
+        payload["detail"] = sora_response["detail"]
+    return payload
+
+
+@app.get("/jobs/{job_id}/character/image")
+def get_character_image(job_id: str) -> Response:
+    job = _load_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    resolved = _resolve_character_asset(job)
+    asset_id = resolved.get("asset_id")
+    if not asset_id:
+        raise HTTPException(status_code=404, detail="character asset not found")
+    asset = resolved.get("asset", {})
+    if asset.get("preview_b64"):
+        image = base64.b64decode(asset["preview_b64"])
+        return Response(content=image, media_type="image/png")
+    image, content_type = _get_agentic_flow().sora.fetch_image(asset_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="character image not ready")
+    return Response(content=image, media_type=content_type or "image/png")
+
+
 def _extract_pdf_text(contents: bytes) -> str:
     pages = _extract_pdf_pages(contents)
     return "\n".join(page["text"] for page in pages).strip()
@@ -631,6 +689,10 @@ class HitlRequest(BaseModel):
     edited_mv_script: list[MVScriptScene] | None = None
 
 
+class CharacterImageRequest(BaseModel):
+    prompt: str = Field(default="SafetyMV character reference, full body, front view.")
+
+
 @app.post("/flow/hitl")
 def submit_hitl(payload: HitlRequest) -> dict[str, Any]:
     return submit_hitl_job(payload.job_id, payload)
@@ -688,3 +750,20 @@ def submit_hitl_job(job_id: str, payload: HitlRequest) -> dict[str, Any]:
         response["job"]["artifacts"] = artifacts
     _update_job(payload.job_id, status="completed", progress=1.0, result=response)
     return response
+
+
+@app.post("/debug/character-image")
+def debug_character_image(payload: CharacterImageRequest) -> dict[str, Any]:
+    sora = _get_agentic_flow().sora
+    response = sora.create_image(payload.prompt)
+    preview_url = None
+    if response.get("b64_json"):
+        preview_url = f"data:image/png;base64,{response['b64_json']}"
+    elif isinstance(response.get("response"), dict):
+        preview_url = sora._extract_asset_url(response.get("response"))  # type: ignore[attr-defined]
+    return {
+        "status": response.get("status"),
+        "asset_id": response.get("asset_id"),
+        "preview_url": preview_url,
+        "detail": response.get("detail"),
+    }

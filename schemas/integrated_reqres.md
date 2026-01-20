@@ -109,7 +109,42 @@
               { "page_number": 1, "start_offset": 8, "end_offset": 11, "text": "작업 전 보호구를 착용한다." }
             ]
           }
-        ]
+        ],
+        "character_asset": {
+          "provider": "sora",
+          "asset_id": "asset_xyz",
+          "status": "submitted",
+          "prompt": "..."
+        },
+        "media_plan": {
+          "character_asset_id": "asset_xyz",
+          "character_job": {
+            "job_id": "character_ref",
+            "provider": "sora",
+            "api_key_env": "SORA_API_KEY",
+            "type": "image",
+            "prompt": "...",
+            "asset_id": "asset_xyz",
+            "status": "submitted"
+          },
+          "video_jobs": [
+            {
+              "scene_id": "scene_1",
+              "provider": "sora",
+              "api_key_env": "SORA_API_KEY",
+              "type": "video",
+              "duration_seconds": 8,
+              "prompt": "...",
+              "character_reference": "character_ref",
+              "character_asset_id": "asset_xyz"
+            }
+          ],
+          "music_job": {
+            "provider": "suno",
+            "api_key_env": "SUNO_API_KEY",
+            "prompt": "..."
+          }
+        }
       }
     },
     "hitl": { "requires_human": false },
@@ -139,6 +174,26 @@
   ]
 }
 ```
+
+---
+
+## 5) GET /jobs/{job_id}/character
+
+### Response
+```json
+{
+  "asset_id": "asset_xyz",
+  "status": "ready",
+  "preview_url": "https://...signed..."
+}
+```
+
+---
+
+## 6) GET /jobs/{job_id}/character/image
+
+### Response
+- 이미지 바이너리 (content-type: image/*)
 
 ### Response
 ```json

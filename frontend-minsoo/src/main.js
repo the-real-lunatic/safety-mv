@@ -177,6 +177,15 @@ document.querySelector("#app").innerHTML = `
               <h3>Style Bind</h3>
               <ul id="style-bind"></ul>
             </div>
+            <div class="option-card">
+              <h3>Media Plan</h3>
+              <ul id="media-plan"></ul>
+              <div class="media-preview">
+                <button id="fetch-character" type="button" class="secondary">Fetch Character Image</button>
+                <p id="character-preview-status" class="muted">-</p>
+                <img id="character-preview" class="character-preview hidden" alt="character preview" />
+              </div>
+            </div>
           </div>
         </section>
       </div>
@@ -209,6 +218,10 @@ const qaResultsEl = document.querySelector("#qa-results");
 const selectedConceptEl = document.querySelector("#selected-concept");
 const blueprintScenesEl = document.querySelector("#blueprint-scenes");
 const styleBindEl = document.querySelector("#style-bind");
+const mediaPlanEl = document.querySelector("#media-plan");
+const fetchCharacterBtn = document.querySelector("#fetch-character");
+const characterPreviewEl = document.querySelector("#character-preview");
+const characterPreviewStatusEl = document.querySelector("#character-preview-status");
 const hitlStatusEl = document.querySelector("#hitl-status");
 const hitlOptionsEl = document.querySelector("#hitl-options");
 const hitlLyricsEl = document.querySelector("#hitl-lyrics");
@@ -221,6 +234,7 @@ let selectedPdfFile = null;
 let currentJobId = null;
 let pollTimer = null;
 let isProcessing = false;
+let characterAssetId = null;
 
 const sampleText = `안전 텍스트 예시:
 작업 전 보호구를 착용한다. 위험 구역에는 출입하지 않는다.
@@ -374,6 +388,45 @@ const renderStyle = (style) => {
   lines.forEach((line) => styleBindEl.appendChild(createListItem(line)));
 };
 
+const renderMediaPlan = (plan) => {
+  clearElement(mediaPlanEl);
+  if (!plan) {
+    mediaPlanEl.appendChild(createListItem("media plan pending"));
+    return;
+  }
+  if (plan.character_job) {
+    const assetInfo = plan.character_job.asset_id
+      ? `asset: ${plan.character_job.asset_id}`
+      : "asset: -";
+    const statusInfo = plan.character_job.status ? `status: ${plan.character_job.status}` : null;
+    mediaPlanEl.appendChild(
+      createListItem(
+        `character · ${plan.character_job.provider} · ${plan.character_job.type} · ${assetInfo}${statusInfo ? ` · ${statusInfo}` : ""}`
+      )
+    );
+  }
+  (plan.video_jobs || []).slice(0, 5).forEach((job) => {
+    mediaPlanEl.appendChild(
+      createListItem(
+        `${job.scene_id} · ${job.provider} · ${job.duration_seconds}s`
+      )
+    );
+  });
+  if (plan.music_job) {
+    mediaPlanEl.appendChild(
+      createListItem(`music · ${plan.music_job.provider}`)
+    );
+  }
+};
+
+const resetCharacterPreview = () => {
+  characterPreviewEl.src = "";
+  characterPreviewEl.classList.add("hidden");
+  characterPreviewStatusEl.textContent = "-";
+  characterAssetId = null;
+  fetchCharacterBtn.disabled = true;
+};
+
 const resetOutputs = () => {
   renderList(stateHistoryEl, []);
   renderList(traceLogEl, []);
@@ -385,6 +438,8 @@ const resetOutputs = () => {
   renderList(keywordEvidenceEl, []);
   renderBlueprintScenes(null);
   renderStyle(null);
+  renderMediaPlan(null);
+  resetCharacterPreview();
   renderPev({ concepts: [], qaResults: [], blueprint: null, retryCount: 0 });
 };
 
@@ -434,6 +489,23 @@ const renderFlow = (data) => {
   renderSelectedConcept(artifacts.selected_concept);
   renderBlueprintScenes(artifacts.blueprint);
   renderStyle(artifacts.style);
+  renderMediaPlan(artifacts.media_plan);
+  const assetId =
+    artifacts.character_asset?.asset_id || artifacts.media_plan?.character_asset_id || null;
+  characterAssetId = assetId;
+  if (assetId) {
+    fetchCharacterBtn.disabled = false;
+    characterPreviewStatusEl.textContent = `character asset: ${assetId}`;
+  } else {
+    fetchCharacterBtn.disabled = true;
+    characterPreviewStatusEl.textContent = "character asset pending";
+  }
+  const previewUrl = artifacts.character_asset?.preview_url;
+  if (previewUrl) {
+    characterPreviewEl.src = previewUrl;
+    characterPreviewEl.classList.remove("hidden");
+    characterPreviewStatusEl.textContent = `character preview ready (${assetId})`;
+  }
   renderPev({
     concepts: artifacts.concepts || [],
     qaResults: artifacts.qa_results || [],
@@ -449,6 +521,46 @@ const renderFlow = (data) => {
     ? "선택한 컨셉을 수정한 뒤 Submit 할 수 있습니다."
     : "HITL 모드가 Skip이면 자동으로 진행됩니다.";
   renderHitlOptions(artifacts.concepts || [], hitl.selected_concept_id, requiresHuman);
+};
+
+characterPreviewEl.addEventListener("load", () => {
+  characterPreviewEl.classList.remove("hidden");
+  characterPreviewStatusEl.textContent = "이미지 로드 완료";
+});
+
+characterPreviewEl.addEventListener("error", () => {
+  characterPreviewEl.classList.add("hidden");
+  characterPreviewStatusEl.textContent = "이미지 로드 실패 또는 아직 준비 중";
+});
+
+const fetchCharacterImage = async () => {
+  if (!currentJobId) {
+    characterPreviewStatusEl.textContent = "job_id 없음";
+    return;
+  }
+  if (!characterAssetId) {
+    characterPreviewStatusEl.textContent = "character asset 없음";
+    return;
+  }
+  characterPreviewStatusEl.textContent = "이미지 확인 중...";
+  try {
+    const response = await fetch(`${apiBase}/jobs/${currentJobId}/character`);
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => ({}));
+      const detail = errorPayload.detail || response.status;
+      throw new Error(`Backend error: ${detail}`);
+    }
+    const data = await response.json();
+    if (data.preview_url) {
+      characterPreviewEl.src = data.preview_url;
+      characterPreviewStatusEl.textContent = `status: ${data.status || "-"}`;
+      return;
+    }
+    characterPreviewStatusEl.textContent = `status: ${data.status || "-"} (proxying)`;
+    characterPreviewEl.src = `${apiBase}/jobs/${currentJobId}/character/image`;
+  } catch (error) {
+    characterPreviewStatusEl.textContent = `이미지 확인 오류: ${error.message}`;
+  }
 };
 
 const renderKeywordEvidence = (evidence = []) => {
@@ -608,6 +720,7 @@ const runFlow = async () => {
 };
 
 runFlowButton.addEventListener("click", runFlow);
+fetchCharacterBtn.addEventListener("click", fetchCharacterImage);
 
 hitlOptionsEl.addEventListener("change", () => {
   const selected = hitlOptionsEl.querySelector("input[name='hitl-concept']:checked");
