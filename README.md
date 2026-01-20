@@ -156,7 +156,7 @@ Worker–Manager 패턴을 적용했습니다.
 
 이를 해결하기 위해:
 
-- **Manager(Orchestrator)**가 전체 시안을 기준으로 작업을 관리하고
+- Manager(Orchestrator)가 전체 시안을 기준으로 작업을 관리하고
 - 여러 **Worker**가 병렬적으로 작업을 수행합니다.
   - 캐릭터 생성 Worker
   - 영상 생성 Worker (12초 클립 × 여러 개 병렬)
