@@ -25,6 +25,7 @@ from .agentic_flow import (
     QAResult,
     KeywordExtraction,
 )
+from .suno_integration import attach_public_suno, trigger_suno_for_job
 from .suno_routes import router as suno_router
 from pypdf import PdfReader
 
@@ -451,6 +452,8 @@ def _run_job(job_id: str) -> None:
             progress=1.0 if status == "completed" else 0.8,
             result=response,
         )
+        if status == "completed":
+            trigger_suno_for_job(job_id, response)
     except Exception as exc:  # noqa: BLE001
         _update_job(job_id, status="failed", progress=1.0, error=str(exc))
 
@@ -532,7 +535,7 @@ def get_job(job_id: str) -> dict[str, Any]:
     job = _load_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
-    return job
+    return attach_public_suno(job)
 
 
 def _resolve_character_asset(job: dict[str, Any]) -> dict[str, Any]:
@@ -698,12 +701,12 @@ class CharacterImageRequest(BaseModel):
 
 
 @app.post("/flow/hitl")
-def submit_hitl(payload: HitlRequest) -> dict[str, Any]:
-    return submit_hitl_job(payload.job_id, payload)
+def submit_hitl(payload: HitlRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    return submit_hitl_job(payload.job_id, payload, background_tasks)
 
 
 @app.post("/jobs/{job_id}/hitl")
-def submit_hitl_job(job_id: str, payload: HitlRequest) -> dict[str, Any]:
+def submit_hitl_job(job_id: str, payload: HitlRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
     if job_id != payload.job_id:
         raise HTTPException(status_code=400, detail="job_id mismatch")
     job = _load_job(payload.job_id)
@@ -753,6 +756,7 @@ def submit_hitl_job(job_id: str, payload: HitlRequest) -> dict[str, Any]:
     if "job" in response:
         response["job"]["artifacts"] = artifacts
     _update_job(payload.job_id, status="completed", progress=1.0, result=response)
+    background_tasks.add_task(trigger_suno_for_job, payload.job_id, response)
     return response
 
 
