@@ -62,23 +62,8 @@ document.querySelector("#app").innerHTML = `
               </select>
             </label>
             <label class="field">
-              <span>LLM Model</span>
-              <input id="model" type="text" value="gpt-4o-mini" />
-            </label>
-            <label class="field">
-              <span>Temperature</span>
-              <input id="temperature" type="number" min="0" max="1.5" step="0.1" value="0.4" />
-            </label>
-            <label class="field">
               <span>추가 요구사항</span>
               <input id="additional" type="text" placeholder="예: 한국어 훅 강조" />
-            </label>
-            <label class="field">
-              <span>HITL</span>
-              <select id="hitl">
-                <option value="skip" selected>Skip</option>
-                <option value="required">Required</option>
-              </select>
             </label>
           </div>
           <button id="run-flow" type="button">Run Agentic Flow</button>
@@ -196,10 +181,10 @@ const pdfInput = document.querySelector("#pdf-input");
 const pdfStatus = document.querySelector("#pdf-status");
 const lengthInput = document.querySelector("#length");
 const genreInput = document.querySelector("#genre");
-const modelInput = document.querySelector("#model");
-const temperatureInput = document.querySelector("#temperature");
+const DEFAULT_LLM_MODEL = "gpt-4o-mini";
+const DEFAULT_LLM_TEMPERATURE = 0.4;
+const DEFAULT_HITL_MODE = "required";
 const additionalInput = document.querySelector("#additional");
-const hitlInput = document.querySelector("#hitl");
 const runFlowButton = document.querySelector("#run-flow");
 const styleInputs = Array.from(document.querySelectorAll("input[name='style']"));
 
@@ -621,7 +606,7 @@ pdfInput.addEventListener("change", async (event) => {
 });
 
 const pollJob = async (jobId) => {
-  const response = await fetch(`${apiBase}/jobs/${jobId}`);
+  const response = await fetch(`${apiBase}/jobs/${jobId}/debug`);
   if (!response.ok) {
     throw new Error(`Job error: ${response.status}`);
   }
@@ -670,9 +655,9 @@ const runFlow = async () => {
       formData.append("selectedStyles", styles.join(","));
       formData.append("selectedGenres", genreInput.value);
       formData.append("additionalRequirements", additionalInput.value);
-      formData.append("llm_model", modelInput.value);
-      formData.append("llm_temperature", String(Number(temperatureInput.value)));
-      formData.append("hitl_mode", hitlInput.value);
+      formData.append("llm_model", DEFAULT_LLM_MODEL);
+      formData.append("llm_temperature", String(DEFAULT_LLM_TEMPERATURE));
+      formData.append("hitl_mode", DEFAULT_HITL_MODE);
       response = await fetch(`${apiBase}/jobs/upload`, {
         method: "POST",
         body: formData,
@@ -687,9 +672,9 @@ const runFlow = async () => {
           selectedStyles: styles,
           selectedGenres: genreInput.value,
           additionalRequirements: additionalInput.value,
-          llm_model: modelInput.value,
-          llm_temperature: Number(temperatureInput.value),
-          hitl_mode: hitlInput.value,
+          llm_model: DEFAULT_LLM_MODEL,
+          llm_temperature: DEFAULT_LLM_TEMPERATURE,
+          hitl_mode: DEFAULT_HITL_MODE,
         }),
       });
     }

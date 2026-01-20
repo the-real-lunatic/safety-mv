@@ -498,9 +498,6 @@ async def create_job_upload(
     selectedStyles: str = Form(""),
     selectedGenres: str = Form("hiphop"),
     additionalRequirements: str = Form(""),
-    llm_model: str = Form("gpt-4o-mini"),
-    llm_temperature: float = Form(0.4),
-    hitl_mode: str = Form("skip"),
 ) -> dict[str, Any]:
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="PDF only")
@@ -518,9 +515,9 @@ async def create_job_upload(
         genre=selectedGenres,
         mood=", ".join(styles) if styles else "default",
         length_seconds=_parse_length(length),
-        llm_model=llm_model,
-        llm_temperature=llm_temperature,
-        hitl_mode=hitl_mode,
+        llm_model="gpt-4o-mini",
+        llm_temperature=0.4,
+        hitl_mode="required",
     )
     job_id = _enqueue_job(BlueprintRequest(document=document, config=config))
     job = _load_job(job_id) or {}
@@ -534,6 +531,27 @@ async def create_job_upload(
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str) -> dict[str, Any]:
+    job = _load_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    result = job.get("result") or {}
+    artifacts = result.get("job", {}).get("artifacts", {}) or {}
+    response_payload = {
+        "job_id": job.get("job_id", job_id),
+        "status": job.get("status"),
+        "progress": job.get("progress"),
+        "result": {
+            "concepts": artifacts.get("concepts") or [],
+            "qa_results": artifacts.get("qa_results") or [],
+            "selected_concept": artifacts.get("selected_concept"),
+        },
+        "error": job.get("error"),
+    }
+    return response_payload
+
+
+@app.get("/jobs/{job_id}/debug")
+def get_job_debug(job_id: str) -> dict[str, Any]:
     job = _load_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
