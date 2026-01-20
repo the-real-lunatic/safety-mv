@@ -2,20 +2,33 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ArrowLeft, Sparkles } from "lucide-react";
+import { Check, ArrowLeft, Sparkles, ChevronDown, ChevronUp, Clipboard } from "lucide-react";
 
 /* =======================
    Types
 ======================= */
 
+const MOCK_LYRICS = true; // 실제 백 붙이면 false
+
+
 type LyricOption = {
   id: 1 | 2;
   text: string;
+  log?: string; // ✅ 추가: 해당 가사 생성 로그
 };
 
 type JobStatus =
   | { status: "lyrics_processing"; progress?: number }
-  | { status: "lyrics_done"; lyrics: { v1: string; v2: string } }
+  | {
+      status: "lyrics_done";
+      lyrics: {
+        v1: string;
+        v2: string;
+        // ✅ 백이 제공하면 사용
+        log1?: string;
+        log2?: string;
+      };
+    }
   | { status: "video_processing"; progress?: number }
   | { status: "video_done"; video_url: string }
   | { status: "error"; message?: string };
@@ -24,11 +37,33 @@ type JobStatus =
    API Utils
 ======================= */
 
+// async function fetchJobStatus(jobId: string): Promise<JobStatus> {
+//   const res = await fetch(`/job_status/${jobId}`, { cache: "no-store" });
+//   if (!res.ok) throw new Error("Failed to fetch job status");
+//   return res.json();
+// }
+
 async function fetchJobStatus(jobId: string): Promise<JobStatus> {
+  if (MOCK_LYRICS) {
+    // 네트워크 흉내 (UX 테스트용)
+    await new Promise((r) => setTimeout(r, 300));
+
+    return {
+      status: "lyrics_done",
+      lyrics: {
+        v1: "These are the lyrics for version 1.\nLa la la...\n(🎵 mock)",
+        v2: "These are the lyrics for version 2.\nNa na na...\n(🎵 mock)",
+        log1: "Mock log: generated v1 successfully",
+        log2: "Mock log: generated v2 successfully",
+      },
+    };
+  }
+
   const res = await fetch(`/job_status/${jobId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch job status");
   return res.json();
 }
+
 
 /* =======================
    Page
@@ -37,8 +72,6 @@ async function fetchJobStatus(jobId: string): Promise<JobStatus> {
 export default function LyricSelectionPage() {
   const router = useRouter();
 
-  /* ---------- State ---------- */
-
   const [jobId, setJobId] = useState<string | null>(null);
 
   const [options, setOptions] = useState<LyricOption[]>([]);
@@ -46,6 +79,12 @@ export default function LyricSelectionPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // ✅ 로그 토글 상태 (버전별)
+  const [logOpen, setLogOpen] = useState<{ 1: boolean; 2: boolean }>({
+    1: false,
+    2: false,
+  });
 
   /* ---------- Polling ---------- */
 
@@ -65,16 +104,16 @@ export default function LyricSelectionPage() {
 
   useEffect(() => {
     let id = sessionStorage.getItem("job_id");
-    const mockup = true
+    const mockup = true;
+
     if (!id) {
-        if (mockup){
-            id = "mockup_job_id";
-            console.log("Using mockup job_id");
-        }
-        else {
-            router.replace("/");
-            return;
-        }
+      if (mockup) {
+        id = "mockup_job_id";
+        console.log("Using mockup job_id");
+      } else {
+        router.replace("/");
+        return;
+      }
     }
 
     setJobId(id);
@@ -96,8 +135,8 @@ export default function LyricSelectionPage() {
 
         if (status.status === "lyrics_done") {
           setOptions([
-            { id: 1, text: status.lyrics.v1 },
-            { id: 2, text: status.lyrics.v2 },
+            { id: 1, text: status.lyrics.v1, log: status.lyrics.log1 },
+            { id: 2, text: status.lyrics.v2, log: status.lyrics.log2 },
           ]);
           stopPolling();
         }
@@ -152,12 +191,6 @@ export default function LyricSelectionPage() {
     if (isSubmitting) return;
     router.back();
   };
-
-  /* =======================
-     4️⃣ Complete 클릭
-        → post_version
-        → 영상 polling
-  ======================= */
 
   const handleComplete = async () => {
     if (!canComplete || !jobId) return;
@@ -214,6 +247,23 @@ export default function LyricSelectionPage() {
   }, [isSubmitting, steps.length]);
 
   /* =======================
+     Helpers
+  ======================= */
+
+  const toggleLog = (id: 1 | 2) => {
+    setLogOpen((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const copyToClipboard = async (text?: string) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      console.error("Clipboard copy failed", e);
+    }
+  };
+
+  /* =======================
      Render
   ======================= */
 
@@ -222,38 +272,97 @@ export default function LyricSelectionPage() {
       <div className="mx-auto max-w-4xl px-4 py-12 space-y-8">
         <header>
           <h1 className="text-3xl text-white">Lyrics Selection</h1>
-          <p className="text-gray-400 mt-1">
-            두 버전 중 하나를 선택해줘.
-          </p>
+          <p className="text-gray-400 mt-1">두 버전 중 하나를 선택해줘.</p>
         </header>
 
         {/* 가사 옵션 */}
         <section className="grid gap-4 md:grid-cols-2">
           {options.map((opt) => {
             const active = selected === opt.id;
+            const hasLog = Boolean(opt.log && opt.log.trim().length > 0);
+
             return (
-              <button
+              <div
                 key={opt.id}
-                type="button"
-                onClick={() => !isSubmitting && setSelected(opt.id)}
-                className={`rounded-2xl border p-4 text-left transition
-                  ${
-                    active
-                      ? "border-cyan-500/70 bg-cyan-500/10"
-                      : "border-gray-800 bg-[#0f0f14]"
-                  }`}
+                className={`rounded-2xl border p-4 transition ${
+                  active
+                    ? "border-cyan-500/70 bg-cyan-500/10"
+                    : "border-gray-800 bg-[#0f0f14]"
+                }`}
               >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-200">Version {opt.id}</span>
-                  {active && <Check className="w-4 h-4 text-cyan-400" />}
+                {/* 상단 선택 영역: 클릭하면 선택 */}
+                <button
+                  type="button"
+                  onClick={() => !isSubmitting && setSelected(opt.id)}
+                  className="w-full text-left"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-200">Version {opt.id}</span>
+                    {active && <Check className="w-4 h-4 text-cyan-400" />}
+                  </div>
+
+                  <div className="h-[360px] overflow-auto rounded-xl bg-black/40 p-3 border border-gray-800">
+                    <pre className="whitespace-pre-wrap text-gray-200 text-sm leading-6">
+                      {opt.text}
+                    </pre>
+                  </div>
+                </button>
+
+                {/* 로그 토글 버튼 */}
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleLog(opt.id)}
+                    disabled={!hasLog}
+                    className={[
+                      "h-10 px-3 rounded-xl border text-sm inline-flex items-center gap-2 transition",
+                      hasLog
+                        ? "border-gray-800 bg-[#121217] text-gray-200 hover:bg-[#14141a]"
+                        : "border-gray-900 bg-[#0f0f14] text-gray-600 cursor-not-allowed",
+                    ].join(" ")}
+                  >
+                    {logOpen[opt.id] ? (
+                      <>
+                        <ChevronUp className="w-4 h-4" />
+                        로그 숨기기
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-4 h-4" />
+                        로그 보기
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(opt.log)}
+                    disabled={!hasLog}
+                    className={[
+                      "h-10 px-3 rounded-xl border text-sm inline-flex items-center gap-2 transition",
+                      hasLog
+                        ? "border-gray-800 bg-[#121217] text-gray-200 hover:bg-[#14141a]"
+                        : "border-gray-900 bg-[#0f0f14] text-gray-600 cursor-not-allowed",
+                    ].join(" ")}
+                    title="로그 복사"
+                  >
+                    <Clipboard className="w-4 h-4" />
+                    Copy
+                  </button>
                 </div>
 
-                <div className="h-[420px] overflow-auto rounded-xl bg-black/40 p-3">
-                  <pre className="whitespace-pre-wrap text-gray-200 text-sm">
-                    {opt.text}
-                  </pre>
-                </div>
-              </button>
+                {/* 로그 영역 */}
+                {hasLog && logOpen[opt.id] && (
+                  <div className="mt-3 rounded-xl border border-gray-800 bg-black/30 p-3">
+                    <p className="text-xs text-gray-400 mb-2">
+                      Generation Log (Version {opt.id})
+                    </p>
+                    <pre className="whitespace-pre-wrap text-xs leading-5 text-gray-200 max-h-[220px] overflow-auto">
+                      {opt.log}
+                    </pre>
+                  </div>
+                )}
+              </div>
             );
           })}
         </section>
@@ -279,9 +388,7 @@ export default function LyricSelectionPage() {
           </button>
         </section>
 
-        {errorMsg && (
-          <p className="text-center text-red-400">{errorMsg}</p>
-        )}
+        {errorMsg && <p className="text-center text-red-400">{errorMsg}</p>}
       </div>
 
       {/* Overlay */}
