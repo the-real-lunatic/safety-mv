@@ -38,19 +38,23 @@ class JobRecord(BaseModel):
     job_id: UUID
     status: JobStatus
     strategy: str
+    safety_text: str
     created_at: datetime
     updated_at: datetime
     options: JobOptions
     attachments: JobAttachments | None = None
     artifacts: list[JobArtifact] = Field(default_factory=list)
+    error: str | None = None
 
 
 class JobResponse(BaseModel):
     job_id: UUID
     status: JobStatus
     strategy: str
+    safety_text: str | None = None
     created_at: datetime
     updated_at: datetime
     options: JobOptions | None = None
     attachments: JobAttachments | None = None
     artifacts: list[JobArtifact]
+    error: str | None = None
