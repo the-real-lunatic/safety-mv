@@ -1,5 +1,7 @@
 "use client";
 
+const API_BASE = "http://localhost:8000";
+
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Video, Check } from "lucide-react";
@@ -58,7 +60,7 @@ export function VideoGeneratorForm() {
   }, []);
 
   async function fetchJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`/job_status/${jobId}`, { cache: "no-store" });
+  const res = await fetch(`/jobs/${jobId}`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch job status");
   return res.json();
 }
@@ -68,20 +70,22 @@ export function VideoGeneratorForm() {
 
   pollingRef.current = window.setInterval(async () => {
     try {
-      const status = await fetchJobStatus(id);
-      setJobStatus(status);
+      const job = await fetch(`${API_BASE}/jobs/${jobId}`).then(r=>r.json());
+      console.log("Polled job status:", job);
+      return;//임시
+      // setJobStatus(status);
 
-      if (status.status === "lyrics_done") {
-        sessionStorage.setItem("lyrics_v1", status.lyrics.v1);
-        sessionStorage.setItem("lyrics_v2", status.lyrics.v2);
+      // if (status.status === "completed") {
+      //   sessionStorage.setItem("lyrics_v1", status.lyrics.v1);
+      //   sessionStorage.setItem("lyrics_v2", status.lyrics.v2);
 
-        stopPolling();
-        router.push("/lyricselection");
-      }
+      //   stopPolling();
+      //   router.push("/lyricselection");
+      // }
 
-      if (status.status === "error") {
-        throw new Error(status.message || "Job failed");
-      }
+      // if (status.status === "error") {
+      //   throw new Error(status.message || "Job failed");
+      // }
     } catch (e) {
       console.error(e);
       stopPolling();
@@ -134,15 +138,18 @@ useEffect(() => {
   setIsGenerating(true);
 
   const formData = new FormData();
-  formData.append("guidelines_pdf", pdfFile);
+  formData.append("file", pdfFile); // ✅ guidelines_pdf 아님
   formData.append("length", length);
-  formData.append("selectedStyles", JSON.stringify(selectedStyles));
+  // formData.append("selectedStyles", JSON.stringify(selectedStyles));
+  formData.append("selectedStyles", selectedStyles.join(","));
   if (!selectedGenres) {
     throw new Error("selectedGenres is missing");
   }
   formData.append("selectedGenres", selectedGenres);
 
   formData.append("additionalRequirements", additionalRequirements);
+
+  formData.append("hitl_mode", "required");
   
   console.log("Submitting form data:", {
     length,
@@ -154,7 +161,7 @@ useEffect(() => {
   
 
   try {
-    const res = await fetch("/post_job", {
+    const res = await fetch(`${API_BASE}/jobs/upload`, {
       method: "POST",
       body: formData,
     });
