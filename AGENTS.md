@@ -390,3 +390,51 @@ MV BLUEPRINT
     <video src="/outputs/abc123.mp4" controls />
     
     ```
+
+---
+
+## Suno Music Generation (Backend Module)
+
+### 목적
+- Suno API를 통해 가사를 기반으로 음악을 생성하고, 콜백 완료 시 MinIO에 저장한다.
+
+### 환경변수
+- SUNO_API_KEY: Suno API 키 (필수)
+- SUNO_CALLBACK_URL: 콜백 URL (필수, 외부 접근 가능한 HTTPS)
+- SUNO_API_BASE: 기본값 `https://api.sunoapi.org`
+- SUNO_MODEL: 기본값 `V4_5ALL`
+- MINIO_BUCKET_MUSIC: 기본값 `safety-mv`
+
+### 엔드포인트
+- POST `/suno/generate`
+  - Request:
+    - `lyrics` (필수, 가사)
+    - `style` (필수, 장르/무드)
+    - `title` (필수)
+    - `job_id` (optional)
+    - `model` (optional)
+    - 기타 옵션: `negative_tags`, `vocal_gender`, `style_weight`, `weirdness_constraint`, `audio_weight`, `persona_id`
+  - Response:
+    - `{ "task_id": "..." }`
+
+- POST `/callbacks/suno/music`
+  - Suno 콜백 수신 엔드포인트
+  - `callbackType=complete`일 때 오디오/이미지를 내려받아 MinIO에 저장
+
+- GET `/suno/tasks/{task_id}`
+  - Suno task 상태/콜백 결과 확인
+
+### 저장 규칙 (MinIO)
+- 버킷: `MINIO_BUCKET_MUSIC` (기본 `safety-mv`)
+- 경로:
+  - 오디오: `suno/{job_id}/{task_id}/{track_id}.mp3`
+  - 커버: `suno/{job_id}/{task_id}/{track_id}.jpg`
+
+### 테스트 (frontend-suno)
+- 프론트 경로: `frontend-suno`
+- 실행:
+  - `npm install`
+  - `npm run dev`
+- 접속:
+  - `http://localhost:5174`
+- API Base는 백엔드 주소 (기본 `http://127.0.0.1:8000`)
