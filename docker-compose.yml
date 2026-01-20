@@ -14,14 +14,29 @@ services:
       context: ./backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_SECURE: "false"
+      APP_ENV: ${APP_ENV:-local}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_HEALTHCHECK_MODEL: ${OPENAI_HEALTHCHECK_MODEL:-}
+      SORA_API_KEY: ${SORA_API_KEY:-}
+      SORA_API_BASE_URL: ${SORA_API_BASE_URL:-https://api.openai.com/v1}
+      SUNO_API_KEY: ${SUNO_API_KEY:-}
+      SUNO_API_BASE_URL: ${SUNO_API_BASE_URL:-https://api.sunoapi.org}
+      STRATEGY_DIR: ${STRATEGY_DIR:-/app/strategies}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+    volumes:
+      - ./strategies:/app/strategies:ro
     depends_on:
       - redis
       - minio
