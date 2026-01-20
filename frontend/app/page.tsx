@@ -38,6 +38,28 @@ export function VideoGeneratorForm() {
   | { status: "lyrics_done"; lyrics: { v1: string; v2: string } }
   | { status: "error"; message?: string };
 
+  type JobApi = {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed" | "hitl_required" | string;
+  progress?: number | null;
+  result?: {
+    concepts?: Array<{ concept_id: string; lyrics: string; mv_script?: any }>;
+    qa_results?: any[];
+    selected_concept?: any;
+  } | null;
+  error?: string | null;
+};
+
+function qaToLog(qa: any): string {
+  // 보기 좋게 문자열로 변환
+  try {
+    return JSON.stringify(qa, null, 2);
+  } catch {
+    return String(qa);
+  }
+}
+
+
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
@@ -65,27 +87,46 @@ export function VideoGeneratorForm() {
   return res.json();
 }
 
-  const startPolling = (id: string) => {
+const startPolling = (id: string) => {
   if (pollingRef.current) return;
 
   pollingRef.current = window.setInterval(async () => {
     try {
-      const job = await fetch(`${API_BASE}/jobs/${jobId}`).then(r=>r.json());
-      console.log("Polled job status:", job);
-      return;//임시
-      // setJobStatus(status);
+      const job: JobApi = await fetch(`${API_BASE}/jobs/${id}`, {
+        cache: "no-store",
+      }).then((r) => r.json());
 
-      // if (status.status === "completed") {
-      //   sessionStorage.setItem("lyrics_v1", status.lyrics.v1);
-      //   sessionStorage.setItem("lyrics_v2", status.lyrics.v2);
+      console.log("Polled job:", job);
 
-      //   stopPolling();
-      //   router.push("/lyricselection");
-      // }
+      // progress UI용 (있으면)
+      // setProgress(typeof job.progress === "number" ? job.progress : null);
 
-      // if (status.status === "error") {
-      //   throw new Error(status.message || "Job failed");
-      // }
+      if (job.error || job.status === "failed") {
+        throw new Error(job.error || "Job failed");
+      }
+
+      const concepts = job.result?.concepts ?? [];
+      if (concepts.length >= 2 && concepts[0]?.lyrics && concepts[1]?.lyrics) {
+        const v1 = String(concepts[0].lyrics);
+        const v2 = String(concepts[1].lyrics);
+
+        const qa = job.result?.qa_results ?? [];
+        const log1 = qa[0] ? qaToLog(qa[0]) : "";
+        const log2 = qa[1] ? qaToLog(qa[1]) : "";
+
+        // ✅ lyricselection에서 바로 쓰도록 저장
+        sessionStorage.setItem("job_id", job.job_id);
+        sessionStorage.setItem("lyrics_v1", v1);
+        sessionStorage.setItem("lyrics_v2", v2);
+        if (log1) sessionStorage.setItem("lyrics_log1", log1);
+        if (log2) sessionStorage.setItem("lyrics_log2", log2);
+
+        stopPolling();
+        router.push("/lyricselection");
+        return;
+      }
+
+      // concepts가 아직 없으면 계속 polling
     } catch (e) {
       console.error(e);
       stopPolling();
@@ -93,6 +134,7 @@ export function VideoGeneratorForm() {
     }
   }, 1000);
 };
+
 
 const stopPolling = () => {
   if (pollingRef.current) {
