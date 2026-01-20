@@ -23,7 +23,7 @@ class JobAttachments(BaseModel):
 
 class JobCreateRequest(BaseModel):
     prompt: str = Field(..., min_length=1)
-    pdf_paths: list[str] = Field(default_factory=list)
+    pdf_paths: list[str] = Field(..., min_length=1)
     strategy: str = Field("parallel_stylelock")
     options: JobOptions = Field(default_factory=JobOptions)
     attachments: JobAttachments | None = None

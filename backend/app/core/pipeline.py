@@ -37,7 +37,7 @@ class PipelineContext:
         if not self.pdf_texts:
             return self.prompt
         joined = "\n\n".join(text for text in self.pdf_texts if text)
-        return f\"{self.prompt}\\n\\n[PDF]\\n{joined}\"
+        return f"{self.prompt}\n\n[PDF]\n{joined}"
 
     def ensure_workdir(self) -> Path:
         return ensure_job_dir(self.job_id)

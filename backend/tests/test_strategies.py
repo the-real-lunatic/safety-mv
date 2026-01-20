@@ -19,6 +19,7 @@ class StrategySmokeTest(unittest.TestCase):
                 strategy_id=strategy_id,
                 prompt="안전모를 착용한다. 작업 반경을 확보한다.",
                 pdf_paths=["input/v1.pdf", "input/v2.pdf"],
+                pdf_texts=[],
                 options={"duration_seconds": 30, "mood": "tense", "site_type": "warehouse"},
                 attachments=None,
             )

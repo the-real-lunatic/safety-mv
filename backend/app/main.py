@@ -7,6 +7,7 @@ import urllib.request
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from minio import Minio
 import redis
@@ -18,6 +19,14 @@ app = FastAPI(
     title="SafetyMV Backend",
     version="0.1.0",
     description="Infra-only backend with health checks.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(jobs_router)
