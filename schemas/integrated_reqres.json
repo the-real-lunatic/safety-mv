@@ -1,0 +1,204 @@
+{
+  "frontend_endpoints": [
+    {
+      "method": "POST",
+      "path": "/jobs",
+      "description": "Create a job from text input only.",
+      "request": {
+        "content_type": "application/json",
+        "body": {
+          "guidelines": "string",
+          "length": "30s | 60s | 90s",
+          "selectedStyles": ["string"],
+          "selectedGenres": "string",
+          "additionalRequirements": "string",
+          "llm_model": "string",
+          "llm_temperature": "number",
+          "hitl_mode": "skip | required"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "job_id": "string"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/jobs/upload",
+      "description": "Create a job from a PDF plus optional text input.",
+      "request": {
+        "content_type": "multipart/form-data",
+        "fields": {
+          "file": "PDF file",
+          "guidelines": "string (optional)",
+          "length": "30s | 60s | 90s",
+          "selectedStyles": "comma-separated string",
+          "selectedGenres": "string",
+          "additionalRequirements": "string",
+          "llm_model": "string",
+          "llm_temperature": "number",
+          "hitl_mode": "skip | required"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "job_id": "string"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/jobs/{job_id}",
+      "description": "Poll job status and retrieve the full agentic flow result.",
+      "request": {
+        "path_params": {
+          "job_id": "string"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "job_id": "string",
+          "status": "queued | running | completed | hitl_required | failed",
+          "progress": "number",
+          "result": {
+            "job": {
+              "job_id": "string",
+              "state": "string",
+              "retry_count": "number",
+              "artifacts": "object"
+            },
+            "hitl": "object",
+            "state_history": ["string"],
+            "trace": ["object"]
+          },
+          "error": "string | null"
+        },
+        "response_examples": {
+          "hitl_required": {
+            "job_id": "job_ab12cd",
+            "status": "hitl_required",
+            "progress": 0.8,
+            "result": {
+              "job": {
+                "state": "HITL",
+                "retry_count": 0,
+                "artifacts": {
+                  "extracted_keywords": ["..."],
+                  "key_points": ["..."],
+                  "keyword_evidence": [
+                    {
+                      "keyword": "장비",
+                      "sources": [
+                        { "page_number": 2, "start_offset": 15, "end_offset": 17, "text": "..." }
+                      ]
+                    }
+                  ],
+                  "concepts": [
+                    { "concept_id": "c1", "lyrics": "...", "mv_script": [{ "start": 0, "end": 5, "description": "..." }] },
+                    { "concept_id": "c2", "lyrics": "...", "mv_script": [{ "start": 0, "end": 6, "description": "..." }] }
+                  ],
+                  "qa_results": [
+                    { "result": "pass", "score": 0.82, "missing_keywords": [], "structural_issues": [] },
+                    { "result": "pass", "score": 0.74, "missing_keywords": [], "structural_issues": [] }
+                  ],
+                  "selected_concept": { "concept_id": "c1", "lyrics": "...", "mv_script": [{ "start": 0, "end": 5, "description": "..." }] }
+                }
+              },
+              "hitl": { "requires_human": true, "selected_concept_id": "c1" },
+              "state_history": ["INIT", "CONCEPT_GEN", "QA", "HITL"],
+              "trace": ["..."]
+            },
+            "error": null
+          },
+          "completed": {
+            "job_id": "job_ab12cd",
+            "status": "completed",
+            "progress": 1.0,
+            "result": {
+              "job": {
+                "state": "STYLE_BIND",
+                "artifacts": {
+                  "selected_concept": { "concept_id": "c1" },
+                  "blueprint": { "duration": 60, "scenes": ["..."] },
+                  "style": { "character": "...", "background": "...", "color": "..." },
+                  "media_plan": { "character_job": "...", "video_jobs": ["..."], "music_job": "..." },
+                  "character_asset": { "asset_id": "asset_xyz", "status": "ready" }
+                }
+              },
+              "hitl": { "requires_human": false },
+              "state_history": ["..."],
+              "trace": ["..."]
+            },
+            "error": null
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/jobs/{job_id}/hitl",
+      "description": "Submit HITL edits and continue the flow.",
+      "request": {
+        "content_type": "application/json",
+        "body": {
+          "job_id": "string",
+          "selected_concept_id": "string"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "job": {
+            "state": "STYLE_BIND",
+            "artifacts": {
+              "selected_concept": { "concept_id": "c1" },
+              "blueprint": { "duration": 60, "scenes": ["..."] },
+              "style": { "character": "...", "background": "...", "color": "..." },
+              "media_plan": { "character_job": "...", "video_jobs": ["..."], "music_job": "..." },
+              "character_asset": { "asset_id": "asset_xyz", "status": "ready" }
+            }
+          },
+          "hitl": { "requires_human": false },
+          "state_history": ["string"],
+          "trace": ["object"]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/jobs/{job_id}/character",
+      "description": "Fetch character image metadata or preview URL.",
+      "request": {
+        "path_params": {
+          "job_id": "string"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "asset_id": "string",
+          "status": "string",
+          "preview_url": "string | null"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/jobs/{job_id}/character/image",
+      "description": "Fetch the character image binary (proxy).",
+      "request": {
+        "path_params": {
+          "job_id": "string"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "image/* binary"
+      }
+    }
+  ]
+}

@@ -1,8 +1,12 @@
 # Integrated Request/Response (SafetyMV)
 
+아래 예시는 `schemas/integrated_reqres.json`의 예시 구조를 그대로 반영한다.
+
+---
+
 ## 1) POST /jobs
 
-### Request
+### Request (application/json)
 ```json
 {
   "guidelines": "안전 텍스트...",
@@ -28,15 +32,15 @@
 ## 2) POST /jobs/upload
 
 ### Request (multipart/form-data)
-- file: PDF
+- file: PDF file
 - guidelines: string (optional)
-- length: string ("30s" | "60s" | "90s")
-- selectedStyles: string (comma separated)
+- length: "30s" | "60s" | "90s"
+- selectedStyles: comma-separated string
 - selectedGenres: string
 - additionalRequirements: string
 - llm_model: string
 - llm_temperature: number
-- hitl_mode: string
+- hitl_mode: "skip" | "required"
 
 ### Response
 ```json
@@ -49,18 +53,28 @@
 
 ## 3) GET /jobs/{job_id}
 
-### Response (processing)
+### Response (schema)
 ```json
 {
-  "job_id": "job_ab12cd",
-  "status": "running",
-  "progress": 0.3,
-  "result": null,
-  "error": null
+  "job_id": "string",
+  "status": "queued | running | completed | hitl_required | failed",
+  "progress": "number",
+  "result": {
+    "job": {
+      "job_id": "string",
+      "state": "string",
+      "retry_count": "number",
+      "artifacts": "object"
+    },
+    "hitl": "object",
+    "state_history": ["string"],
+    "trace": ["object"]
+  },
+  "error": "string | null"
 }
 ```
 
-### Response (HITL required)
+### Response Example (hitl_required)
 ```json
 {
   "job_id": "job_ab12cd",
@@ -69,6 +83,7 @@
   "result": {
     "job": {
       "state": "HITL",
+      "retry_count": 0,
       "artifacts": {
         "extracted_keywords": ["..."],
         "key_points": ["..."],
@@ -76,10 +91,19 @@
           {
             "keyword": "장비",
             "sources": [
-              { "page_number": 2, "start_offset": 15, "end_offset": 17, "text": "장비 이상 징후 발견 시 즉시 중지한다." }
+              { "page_number": 2, "start_offset": 15, "end_offset": 17, "text": "..." }
             ]
           }
-        ]
+        ],
+        "concepts": [
+          { "concept_id": "c1", "lyrics": "...", "mv_script": [{ "start": 0, "end": 5, "description": "..." }] },
+          { "concept_id": "c2", "lyrics": "...", "mv_script": [{ "start": 0, "end": 6, "description": "..." }] }
+        ],
+        "qa_results": [
+          { "result": "pass", "score": 0.82, "missing_keywords": [], "structural_issues": [] },
+          { "result": "pass", "score": 0.74, "missing_keywords": [], "structural_issues": [] }
+        ],
+        "selected_concept": { "concept_id": "c1", "lyrics": "...", "mv_script": [{ "start": 0, "end": 5, "description": "..." }] }
       }
     },
     "hitl": { "requires_human": true, "selected_concept_id": "c1" },
@@ -90,7 +114,7 @@
 }
 ```
 
-### Response (completed)
+### Response Example (completed)
 ```json
 {
   "job_id": "job_ab12cd",
@@ -100,29 +124,85 @@
     "job": {
       "state": "STYLE_BIND",
       "artifacts": {
-        "extracted_keywords": ["..."],
-        "key_points": ["..."],
-        "keyword_evidence": [
-          {
-            "keyword": "보호구",
-            "sources": [
-              { "page_number": 1, "start_offset": 8, "end_offset": 11, "text": "작업 전 보호구를 착용한다." }
-            ]
-          }
-        ]
+        "selected_concept": { "concept_id": "c1" },
+        "blueprint": { "duration": 60, "scenes": ["..."] },
+        "style": { "character": "...", "background": "...", "color": "..." },
+        "media_plan": { "character_job": "...", "video_jobs": ["..."], "music_job": "..." },
+        "character_asset": { "asset_id": "asset_xyz", "status": "ready" }
       }
     },
     "hitl": { "requires_human": false },
-    "state_history": ["INIT", "CONCEPT_GEN", "QA", "LOCK_BLUEPRINT_CORE", "STYLE_BIND"],
+    "state_history": ["..."],
     "trace": ["..."]
   },
   "error": null
 }
 ```
 
-### keyword_evidence 설명
-- page_number: PDF 기준 1부터, 사용자 입력만 있으면 0
-- start_offset / end_offset: 해당 페이지 텍스트 기준의 위치
+### Response Examples (as response_examples block)
+```json
+{
+  "response_examples": {
+    "hitl_required": {
+      "job_id": "job_ab12cd",
+      "status": "hitl_required",
+      "progress": 0.8,
+      "result": {
+        "job": {
+          "state": "HITL",
+          "retry_count": 0,
+          "artifacts": {
+            "extracted_keywords": ["..."],
+            "key_points": ["..."],
+            "keyword_evidence": [
+              {
+                "keyword": "장비",
+                "sources": [
+                  { "page_number": 2, "start_offset": 15, "end_offset": 17, "text": "..." }
+                ]
+              }
+            ],
+            "concepts": [
+              { "concept_id": "c1", "lyrics": "...", "mv_script": [{ "start": 0, "end": 5, "description": "..." }] },
+              { "concept_id": "c2", "lyrics": "...", "mv_script": [{ "start": 0, "end": 6, "description": "..." }] }
+            ],
+            "qa_results": [
+              { "result": "pass", "score": 0.82, "missing_keywords": [], "structural_issues": [] },
+              { "result": "pass", "score": 0.74, "missing_keywords": [], "structural_issues": [] }
+            ],
+            "selected_concept": { "concept_id": "c1", "lyrics": "...", "mv_script": [{ "start": 0, "end": 5, "description": "..." }] }
+          }
+        },
+        "hitl": { "requires_human": true, "selected_concept_id": "c1" },
+        "state_history": ["INIT", "CONCEPT_GEN", "QA", "HITL"],
+        "trace": ["..."]
+      },
+      "error": null
+    },
+    "completed": {
+      "job_id": "job_ab12cd",
+      "status": "completed",
+      "progress": 1.0,
+      "result": {
+        "job": {
+          "state": "STYLE_BIND",
+          "artifacts": {
+            "selected_concept": { "concept_id": "c1" },
+            "blueprint": { "duration": 60, "scenes": ["..."] },
+            "style": { "character": "...", "background": "...", "color": "..." },
+            "media_plan": { "character_job": "...", "video_jobs": ["..."], "music_job": "..." },
+            "character_asset": { "asset_id": "asset_xyz", "status": "ready" }
+          }
+        },
+        "hitl": { "requires_human": false },
+        "state_history": ["..."],
+        "trace": ["..."]
+      },
+      "error": null
+    }
+  }
+}
+```
 
 ---
 
@@ -132,20 +212,45 @@
 ```json
 {
   "job_id": "job_ab12cd",
-  "selected_concept_id": "c1",
-  "edited_lyrics": "(optional)",
-  "edited_mv_script": [
-    {"start": 0, "end": 5, "description": "..."}
-  ]
+  "selected_concept_id": "c1"
 }
 ```
+
+### Response Example
+```json
+{
+  "job": {
+    "state": "STYLE_BIND",
+    "artifacts": {
+      "selected_concept": { "concept_id": "c1" },
+      "blueprint": { "duration": 60, "scenes": ["..."] },
+      "style": { "character": "...", "background": "...", "color": "..." },
+      "media_plan": { "character_job": "...", "video_jobs": ["..."], "music_job": "..." },
+      "character_asset": { "asset_id": "asset_xyz", "status": "ready" }
+    }
+  },
+  "hitl": { "requires_human": false },
+  "state_history": ["string"],
+  "trace": ["object"]
+}
+```
+
+---
+
+## 5) GET /jobs/{job_id}/character
 
 ### Response
 ```json
 {
-  "job": { "state": "STYLE_BIND" },
-  "hitl": { "requires_human": false },
-  "state_history": ["..."],
-  "trace": ["..."]
+  "asset_id": "string",
+  "status": "string",
+  "preview_url": "string | null"
 }
 ```
+
+---
+
+## 6) GET /jobs/{job_id}/character/image
+
+### Response
+- image/* binary
