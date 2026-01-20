@@ -32,6 +32,9 @@ services:
       SUNO_CALLBACK_URL: ${SUNO_CALLBACK_URL:-}
       SUNO_API_BASE: ${SUNO_API_BASE:-https://api.sunoapi.org}
       SUNO_MODEL: ${SUNO_MODEL:-V4_5ALL}
+      SORA_API_KEY: ${SORA_API_KEY:-}
+      SORA_API_BASE: ${SORA_API_BASE:-https://api.openai.com/v1}
+      SORA_IMAGE_ENDPOINT: ${SORA_IMAGE_ENDPOINT:-/images/generations}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
