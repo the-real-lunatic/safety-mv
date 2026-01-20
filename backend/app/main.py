@@ -24,6 +24,7 @@ from .agentic_flow import (
     QAResult,
     KeywordExtraction,
 )
+from .suno_routes import router as suno_router
 from pypdf import PdfReader
 
 app = FastAPI(
@@ -36,11 +37,14 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(suno_router)
 
 MOCK_NOTICE = "infra-only scaffold (mock outputs, no model/pipeline logic)"
 DEFAULT_GENRE = "Hip-hop"

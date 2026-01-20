@@ -3,7 +3,7 @@ version: "3.9"
 services:
   frontend:
     build:
-      context: ./frontend
+      context: ./frontend-suno
     ports:
       - "3000:80"
     depends_on:
@@ -20,6 +20,10 @@ services:
       REDIS_PORT: 6379
       REDIS_DB: 0
       GPT_API_KEY: ${GPT_API_KEY:-}
+      SUNO_API_KEY: ${SUNO_API_KEY:-}
+      SUNO_CALLBACK_URL: ${SUNO_CALLBACK_URL:-}
+      SUNO_API_BASE: ${SUNO_API_BASE:-https://api.sunoapi.org}
+      SUNO_MODEL: ${SUNO_MODEL:-V4_5ALL}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
